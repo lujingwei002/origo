@@ -21,7 +21,9 @@ $(JSONCPP_DIR)/clean:
 	rm -rf $(JSONCPP_DIR)/build
 
 $(JSONCPP_DIR)/install:
-	@echo 'install jsoncpp'
+	@echo '=== install jsoncpp ==='
+	@mkdir -p ../lib
+	@mkdir -p ../include
 	cp $(JSONCPP_LIB) ../lib
 	rm -rf ../include/json
 	cp -rf $(JSONCPP_DIR)/include/json ../include
@@ -43,7 +45,9 @@ $(HTTPPARSER_DIR)/clean:
 	$(MAKE) -C $(HTTPPARSER_DIR) clean
 
 $(HTTPPARSER_DIR)/install:
-	@echo 'install http-parser'
+	@echo '=== install http-parser ==='
+	@mkdir -p ../lib
+	@mkdir -p ../include
 	cp $(HTTPPARSER_LIB) ../lib 
 	rm -rf ../include/http-parser;mkdir ../include/http-parser
 	cp -rf $(HTTPPARSER_DIR)/*.h ../include/http-parser
