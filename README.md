@@ -96,15 +96,10 @@ Note over 网关:握手
 ```
 //格式是JSON串
 request {
-    "path":"/server1", 
-    "password":"xxx",
+    "path":"/server1", 			//路径,用来选择服务器
+    "password":"xxx",			//密码
     "secret": "随机生成的字符串"
 }
-/*
-path: 路径,比如用来选择服务器
-password: 密码
-secret: 随机生成的字符串,使用rsa加密
-*/
 response {
     "code":200,
     "heartbeat":60
