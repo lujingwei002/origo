@@ -39,8 +39,8 @@ gate -c gate.conf -s reload
 ``` mermaid
 sequenceDiagram
 前端->>网关: handshake(1)
+Note over 网关:握手
 网关-->>前端: handshake(1)
-Note right of 网关:握手
 前端->>网关: handshake_ack(2)
 
 前端->>网关: data(3)
@@ -93,7 +93,7 @@ Note right of 网关:握手
 
 ### 1.握手
 
-```json
+```
 //格式是JSON串
 request {
     "path":"/server1", 
