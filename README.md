@@ -34,22 +34,23 @@ gate -c gate.conf -s reload
 
 
 
-# 流程图
+# 时序图
 
-~~~ sequence
-前端->网关: handshake(1)
-网关-->前端: handshake(1)
+``` mermaid
+sequenceDiagram
+前端->>网关: handshake(1)
+网关-->>前端: handshake(1)
 Note right of 网关:握手
-前端-->网关: handshake_ack(2)
+前端->>网关: handshake_ack(2)
 
-前端->网关: data(3)
-网关->前端: data(3)
-前端->网关: heartbeat(4)
-网关->前端: heartbeat(4)
-网关->前端: kick(5)
-网关->前端: down(6)
-网关->前端: maintain(7)
-~~~
+前端->>网关: data(3)
+网关-->>前端: data(3)
+前端->>网关: heartbeat(4)
+网关-->>前端: heartbeat(4)
+网关-->>前端: kick(5)
+网关-->>前端: down(6)
+网关-->>前端: maintain(7)
+```
 
 # 协议结构
 ```bash
@@ -90,12 +91,12 @@ Note right of 网关:握手
 
 # Payload
 
-## 1.握手
+### 1.握手
 
 ```json
 //格式是JSON串
 request {
-    "path":"/server1",
+    "path":"/server1", 
     "password":"xxx",
     "secret": "随机生成的字符串"
 }
@@ -118,39 +119,39 @@ code: 	200 OK
 */
 ```
 
-## 2.握手确认
+### 2.握手确认
 
 ```json
 无
 ```
 
-## 3.数据帧
+### 3.数据帧
 
 ```json
 sproto
 ```
 
-## 4.心跳
+### 4.心跳
 
 ```json
-发送间隔是握手时返回的
+
 ```
 
-## 5.踢下线
+### 5.踢下线
 
 ```json
-字符串，描述原因
+JSON字符串，描述原因
 ```
 
-## 6.服务器关闭
+### 6.服务器关闭
 
 ```json
-字符串，描述原因
+JSON字符串，描述原因
 ```
 
-## 7.服务器维护
+### 7.服务器维护
 
 ```json
-字符串，描述原因
+JSON字符串，描述原因
 ```
 
