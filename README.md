@@ -1,6 +1,5 @@
 # origo
 
-
 # 下载依赖
 ```bash
 cd dep
@@ -31,8 +30,6 @@ gate -c gate.conf -s stop
 ```bash
 gate -c gate.conf -s reload
 ```
-
-
 
 # 时序图
 
@@ -71,13 +68,10 @@ Note over 网关:握手
 ```
 
 如果是tcp的话，前面还有2字节的消息包长度，不包括自身
-
 如果是websocket的话，用websocket本身的消息头
-
 * FIN：帧结束位
 * RSV：保留位
 * Opcode：类型
-
   1. 握手
   2. 握手确认
   3. 数据帧
@@ -88,11 +82,8 @@ Note over 网关:握手
 * Reserve：保留位
 * Payload Data：数据
 
-
 # Payload
-
 ### 1.握手
-
 ```
 //格式是JSON串
 request {
@@ -115,38 +106,30 @@ code: 	200 OK
 ```
 
 ### 2.握手确认
-
 ```
 无
 ```
 
 ### 3.数据帧
-
 ```
 sproto
 ```
 
 ### 4.心跳
-
 ```
-
 ```
 
 ### 5.踢下线
-
 ```
 JSON字符串，描述原因
 ```
 
 ### 6.服务器关闭
-
 ```
 JSON字符串，描述原因
 ```
 
 ### 7.服务器维护
-
 ```
 JSON字符串，描述原因
 ```
-
