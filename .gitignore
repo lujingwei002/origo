@@ -34,5 +34,6 @@
 
 bin/gate
 build
-dep
+dep/http-parser*
+dep/jsoncpp*
 lib
