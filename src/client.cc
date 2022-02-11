@@ -181,18 +181,24 @@ void Client::onWrite() {
         if (this->sendDeque.size() <= 0) {
             if (this->status == client_status_delayclose) {
                 this->onClose();
+                break;
+            } else {
+                aeDeleteFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE);
+                break;
             }
-            break;
         }
         byte_array* b = this->sendDeque.back();
         if (nullptr == b) {
             if (this->status == client_status_delayclose) {
                 this->onClose();
+                break;
+            } else {
+                break;
             }
-            break;
         }
         if (b->length() <= 0) {
             this->sendDeque.pop_back();
+            aeDeleteFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE);
             break;
         }
         int ir = send(this->sockfd, b->front(), b->length(), 0);
@@ -314,36 +320,15 @@ byte_array* Client::WillSend(size_t len) {
         } 
         byte_array* b = this->server->AllocBuffer(this->server->config.sendBufferSize);
         this->sendDeque.push_front(b);
+        aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, on_write, this);
         return b;
     } else {
+        aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, on_write, this);
         return this->sendDeque.front();
     }
 }
 
 void Client::Recv(const char* data, size_t len) {
-    if (strncmp(data, "3", 1) == 0) {
-        char *payload = (char*)data + sizeof(packet_header);
-        memmove(payload, data, len);
-        *(payload + len) = 0;
-        len += sizeof(packet_header);
-        packet_header* header = (packet_header*)data;
-        header->opcode = packet_type_data;
-    } else if (strncmp(data, "1", 1) == 0) {
-        len = sizeof(packet_header);
-        packet_header* header = (packet_header*)data;
-        header->opcode = packet_type_handshake;
-        char *payload = (char*)data + sizeof(packet_header);
-        strcpy(payload, R"({"path":"/s1","password":"foobar"})");
-        len += strlen(R"({"path":"/s1","password":"foobar"})");
-    } else if (strncmp(data, "2", 1) == 0) {
-        len = sizeof(packet_header);
-        packet_header* header = (packet_header*)data;
-        header->opcode = packet_type_handshake_ack;
-    } else if (strncmp(data, "4", 1) == 0) {
-        len = sizeof(packet_header);
-        packet_header* header = (packet_header*)data;
-        header->opcode = packet_type_heartbeat;
-    }
     packet_header* header = (packet_header*)data;
     switch(header->opcode) {
         case packet_type_handshake:{

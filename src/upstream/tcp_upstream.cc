@@ -152,18 +152,24 @@ void TcpUpstream::onWrite() {
         if (this->sendDeque.size() <= 0) {
             if (upstream->status == upstream_status_delayclose) {
                 this->onClose();
+                break;
+            } else {
+                aeDeleteFileEvent(upstream->gate->loop, sockfd, AE_WRITABLE);
+                break;
             }
-            break;
         }
         byte_array* b = this->sendDeque.back();
         if (nullptr == b) {
             if (upstream->status == upstream_status_delayclose) {
                 this->onClose();
+                break;
+            } else {
+                break;
             }
-            break;
         }
         if (b->length() <= 0) {
             this->sendDeque.pop_back();
+            aeDeleteFileEvent(upstream->gate->loop, sockfd, AE_WRITABLE);
             break;
         }
         //for(size_t i = 0; i < b->length(); i++) {
@@ -354,8 +360,10 @@ byte_array* TcpUpstream::WillSend(size_t len) {
         } 
         byte_array* b = upstream->group->AllocBuffer(upstream->group->config.sendBufferSize);
         this->sendDeque.push_front(b);
+        aeCreateFileEvent(upstream->gate->loop, sockfd, AE_WRITABLE, on_write, (void*)this);
         return b;
     } else {
+        aeCreateFileEvent(upstream->gate->loop, sockfd, AE_WRITABLE, on_write, (void*)this);
         return this->sendDeque.front();
     }
 }
