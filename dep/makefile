@@ -13,7 +13,7 @@ $(JSONCPP_DIR):
 
 $(JSONCPP_LIB): 
 	mkdir $(JSONCPP_DIR)/build
-	cd $(JSONCPP_DIR)/build; cmake3 ..
+	cd $(JSONCPP_DIR)/build; cmake ..
 	$(MAKE) -C $(JSONCPP_DIR)/build 
 
 $(JSONCPP_DIR)/clean:
