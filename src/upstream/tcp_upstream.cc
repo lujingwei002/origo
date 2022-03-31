@@ -46,7 +46,7 @@ TcpUpstream::TcpUpstream(Upstream* upstream) {
 
 TcpUpstream::~TcpUpstream() {
     Upstream* upstream = this->upstream;
-    upstream->LogDebug("[tcp_upstream] ~TcpUpstream");
+    upstream->logDebug("[tcp_upstream] ~TcpUpstream");
     if(this->recvBuffer) {
         upstream->group->FreeBuffer(this->recvBuffer);
         this->recvBuffer = nullptr;
@@ -86,7 +86,7 @@ void TcpUpstream::Close() {
 
 void TcpUpstream::onClose() {
     Upstream* upstream = this->upstream;
-    upstream->LogDebug("[tcp_upstream] onClose");
+    upstream->logDebug("[tcp_upstream] onClose");
     if (upstream->status == upstream_status_delayclose) {
         //关闭写
         shutdown(this->sockfd, SHUT_RDWR);
@@ -103,24 +103,24 @@ void TcpUpstream::onClose() {
 void TcpUpstream::onRead() {
     Upstream* upstream = this->upstream;
     if (this->sockfd < 0) {
-        upstream->LogError("[tcp_upstream] onRead failed, error='sockfd invalid'");
+        upstream->logError("[tcp_upstream] onRead failed, error='sockfd invalid'");
         return;
     }
     if (upstream->status != upstream_status_connect) {
-        upstream->LogError("[tcp_upstream] onRead failed, error='status invalid'");
+        upstream->logError("[tcp_upstream] onRead failed, error='status invalid'");
         return;
     }
     for (;;) {
         int ir = recv(this->sockfd, (void*)this->recvBuffer->back(), this->recvBuffer->capacity(), 0); 
         int last_errno = errno;
-        upstream->LogDebug("[tcp_upstream] onRead, recv %d", ir);
+        upstream->logDebug("[tcp_upstream] onRead, recv %d", ir);
         if (ir == 0 || (ir == -1 && last_errno != EAGAIN)) {
             //close
             this->onClose();
             return;
         }
         if (ir == -1 && last_errno == EAGAIN) {
-            upstream->LogDebug("[tcp_upstream] onRead, not more data, wait");
+            upstream->logDebug("[tcp_upstream] onRead, not more data, wait");
             //wait data
             break;
         }
@@ -132,7 +132,7 @@ void TcpUpstream::onRead() {
             } else if(r == 0) {
                 //more data
                 if (this->recvBuffer->front() == this->recvBuffer->data() && this->recvBuffer->back() == this->recvBuffer->end()) {
-                    upstream->LogError("[client] onRead failed, error='buffer not enough'");
+                    upstream->logError("[client] onRead failed, error='buffer not enough'");
                     this->Close();
                     return;
                 } else {
@@ -147,7 +147,7 @@ void TcpUpstream::onRead() {
 
 void TcpUpstream::onWrite() {
     Upstream* upstream = this->upstream;
-    //this->upstream->LogDebug("[tcp_upstream] onWrite");
+    //this->upstream->logDebug("[tcp_upstream] onWrite");
     for(;;) {
         if (this->sendDeque.size() <= 0) {
             if (upstream->status == upstream_status_delayclose) {
@@ -177,7 +177,7 @@ void TcpUpstream::onWrite() {
         //}
         //printf("\n");
         int ir = send(this->sockfd, b->front(), b->length(), 0);
-        upstream->LogDebug("[tcp_upstream] onWrite, len=%ld, result=%d", b->length(), ir);
+        upstream->logDebug("[tcp_upstream] onWrite, len=%ld, result=%d", b->length(), ir);
         if (ir > 0) {
             b->read(ir);
             if (b->length() <= 0) {
@@ -195,19 +195,19 @@ void TcpUpstream::onWrite() {
 
 void TcpUpstream::onConnectError() {
     Upstream* upstream = this->upstream;
-    upstream->LogDebug("[tcp_upstream] onConnectError");
+    upstream->logDebug("[tcp_upstream] onConnectError");
 }
 
 void TcpUpstream::onConnectSucc() {
     Upstream* upstream = this->upstream;
     aeDeleteFileEvent(upstream->gate->loop, sockfd, AE_READABLE|AE_WRITABLE);
     if (this->checkConnecting()) {
-        upstream->LogDebug("[tcp_upstream] onConnectSucc");
+        upstream->logDebug("[tcp_upstream] onConnectSucc");
         upstream->status = upstream_status_connect;
         aeCreateFileEvent(upstream->gate->loop, sockfd, AE_READABLE, on_read, (void*)this);
         aeCreateFileEvent(upstream->gate->loop, sockfd, AE_WRITABLE, on_write, (void*)this);
     } else {
-        upstream->LogError("[tcp_upstream] onConnectError");
+        upstream->logError("[tcp_upstream] onConnectError");
         upstream->status = upstream_status_connect_err;
         close(this->sockfd);
         this->sockfd = -1;
@@ -231,16 +231,16 @@ bool TcpUpstream::checkConnecting() {
     return false;
 }
 
-int TcpUpstream::Start() {
+int TcpUpstream::start() {
     Upstream* upstream = this->upstream;
     if (upstream->status != upstream_status_none) {
-        upstream->LogError("[tcp_upstream] Start fail, status=%d, error='status error'", upstream->status);
+        upstream->logError("[tcp_upstream] start fail, status=%d, error='status error'", upstream->status);
         return e_status;
     }
-    upstream->LogError("[tcp_upstream] Start, host=%s, port=%d, weight=%d", upstream->config.host.c_str(), upstream->config.port, upstream->config.weight);
+    upstream->logError("[tcp_upstream] start, host=%s, port=%d, weight=%d", upstream->config.host.c_str(), upstream->config.port, upstream->config.weight);
     byte_array* recvBuffer = upstream->group->AllocBuffer(upstream->group->config.recvBufferSize);
     if (recvBuffer == nullptr) {
-        upstream->LogError("[tcp_upstream] Start fail, error='alloc recv buffer'");
+        upstream->logError("[tcp_upstream] start fail, error='alloc recv buffer'");
         return e_out_of_menory;
     }
     this->recvBuffer = recvBuffer;
@@ -253,7 +253,7 @@ int TcpUpstream::Start() {
         struct hostent *hostent;
         hostent = gethostbyname(ip);
         if(hostent->h_addr_list[0] == NULL) {
-            upstream->LogError("[tcp_upstream] Start fail, ip=%s, error='gethostbyname'", ip);
+            upstream->logError("[tcp_upstream] start fail, ip=%s, error='gethostbyname'", ip);
             return e_socket;
         }
         memcpy(&this->addr.sin_addr, (struct in_addr *)hostent->h_addr_list[0], sizeof(struct in_addr));
@@ -261,23 +261,21 @@ int TcpUpstream::Start() {
     this->addr.sin_port = htons(upstream->config.port);        
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if(sockfd < 0) {
-        upstream->LogError("[tcp_upstream] Start failed, error='create socket'");
+        upstream->logError("[tcp_upstream] start failed, error='create socket'");
         return e_socket;
     }
     // non block
     int err = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK);
     if (err < 0) {
-        upstream->LogError("[tcp_upstream] Start failed, error='fcntl'");
+        upstream->logError("[tcp_upstream] start failed, error='fcntl'");
         return e_socket;
     }
-
     // create event
     aeCreateFileEvent(upstream->gate->loop, sockfd, AE_READABLE, on_connect_err, (void*)this);
     aeCreateFileEvent(upstream->gate->loop, sockfd, AE_WRITABLE, on_connect_succ, (void*)this);
-
     err = connect(sockfd, (struct sockaddr *)&this->addr, sizeof(this->addr));
     if(err < 0 && errno != EINPROGRESS) {
-        upstream->LogError("[tcp_upstream] Start fail, errno=%d, error='%s'", errno, strerror(errno));
+        upstream->logError("[tcp_upstream] start fail, errno=%d, error='%s'", errno, strerror(errno));
         aeDeleteFileEvent(upstream->gate->loop, sockfd, AE_READABLE|AE_WRITABLE);
         close(sockfd);
         return e_socket;
@@ -308,16 +306,16 @@ void TcpUpstream::TryReconnect() {
         this->sockfd = -1;
     }
 
-    upstream->LogDebug("[tcp_upstream] TryReconnect");
+    upstream->logDebug("[tcp_upstream] TryReconnect");
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if(sockfd < 0) {
-        upstream->LogError("[tcp_upstream] TryReconnect failed, error='%s'", strerror(errno));
+        upstream->logError("[tcp_upstream] TryReconnect failed, error='%s'", strerror(errno));
         return;
     }
     // non block
     int err = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK);
     if (err < 0) {
-        upstream->LogError("[tcp_upstream] TryReconnect failed, error='%s'", strerror(errno));
+        upstream->logError("[tcp_upstream] TryReconnect failed, error='%s'", strerror(errno));
         close(sockfd);
         return;
     }
@@ -326,7 +324,7 @@ void TcpUpstream::TryReconnect() {
     aeCreateFileEvent(upstream->gate->loop, sockfd, AE_WRITABLE, on_connect_succ, (void*)this);
     err = connect(sockfd, (struct sockaddr *)&this->addr, sizeof(this->addr));
     if(err < 0 && errno != EINPROGRESS) {
-        upstream->LogError("[tcp_upstream] TryReconnect fail, error='%s'", strerror(errno));
+        upstream->logError("[tcp_upstream] TryReconnect fail, error='%s'", strerror(errno));
         close(sockfd);
         return;
     }
@@ -339,14 +337,14 @@ void TcpUpstream::RecvClientData(const char* header, size_t headerLen, const cha
     size_t packetLen = headerLen + len;
     byte_array* frame = this->WillSend(packetLen);
     if (nullptr == frame) {
-        upstream->LogError("[tcp_upstream] RecvClientData failed, error='WillSend'");
+        upstream->logError("[tcp_upstream] RecvClientData failed, error='WillSend'");
         return;
     }
     memcpy(frame->back(), header, headerLen);
     if (payload != nullptr) {
         memcpy(frame->back() + headerLen, payload, len);
     }
-    upstream->LogDebug("[tcp_upstream] RecvClientData packetLen:%ld", packetLen);
+    upstream->logDebug("[tcp_upstream] RecvClientData packetLen:%ld", packetLen);
     frame->write(packetLen);
     return;
 }
@@ -355,7 +353,7 @@ byte_array* TcpUpstream::WillSend(size_t len) {
     Upstream* upstream = this->upstream;
     if(this->sendDeque.size() <= 0 || this->sendDeque.front()->capacity() < len) {
         if (len > upstream->group->config.sendBufferSize) {
-            upstream->LogError("[tcp_upstream] send buffer overflow, config=%ld, expect=%ld", upstream->group->config.sendBufferSize, len);
+            upstream->logError("[tcp_upstream] send buffer overflow, config=%ld, expect=%ld", upstream->group->config.sendBufferSize, len);
             return nullptr;
         } 
         byte_array* b = upstream->group->AllocBuffer(upstream->group->config.sendBufferSize);

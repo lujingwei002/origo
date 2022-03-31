@@ -2,11 +2,12 @@
 #include "client.h"
 class Gate;
 class Client;
+class Server;
 
-class TelnetHandler : public IClientHandler {
+class TelnetClient : public IClientHandler {
 public:
-    TelnetHandler(Gate* gate, Client* client);
-    virtual ~TelnetHandler();
+    TelnetClient(Gate* gate, Server* server, Client* client);
+    virtual ~TelnetClient();
 public:
     virtual int Unpack(const char* buffer, size_t len);
     virtual int Pack(const char* data, size_t len) {return 0;}
@@ -15,4 +16,4 @@ public:
     Client* client;
 };
 
-TelnetHandler* NewTelnetHandler(Gate* gate, Client* client);
+TelnetClient* NewTelnetClient(Gate* gate, Server* server, Client* client);

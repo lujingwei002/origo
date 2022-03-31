@@ -12,7 +12,7 @@ public:
     Logger(const char* filePath);
     ~Logger();
 public:
-    int Start();
+    int start();
     void Log(const char* fmt, ...);
     void Log(const char* fmt, va_list args);
     void Close();

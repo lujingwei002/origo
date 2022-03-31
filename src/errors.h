@@ -11,6 +11,15 @@ const int e_status          = 5;
 const int e_listen          = 6;
 const int e_bind            = 7;
 const int e_socket          = 8;
+const int e_ae              = 9;
+const int e_ae_createtimer  = 10;
+const int e_gate_status     = 11;
+const int e_open_pid_file   = 12;
+const int e_lock_pid_file   = 13;
+const int e_server_status   = 14;
+const int e_upstream_group_status   = 15;
+const int e_unknown_client  = 16;
+
 
 struct out_of_memory : std::exception {
       const char* what() const noexcept {return "out of memory!";}

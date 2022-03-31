@@ -182,7 +182,7 @@ void Logger::Log(const char* fmt, va_list args) {
     fwrite(buffer, offset, 1, stdout);
 }
 
-int Logger::Start() {
+int Logger::start() {
     if (nullptr != this->file){
         return  1;
     }

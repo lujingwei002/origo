@@ -29,31 +29,31 @@ Location::~Location() {
 }
 
 Upstream* Location::SelectUpstream() {
-    UpstreamGroup* group = this->gate->SelectUpstreamGroup(this->config.proxyPass);
+    UpstreamGroup* group = this->gate->selectUpstreamGroup(this->config.proxyPass);
     if (nullptr == group) {
         return nullptr;
     }
     return group->SelectUpstream();
 }
 
-void Location::LogAccess(const char* fmt, va_list args) {
+void Location::logAccess(const char* fmt, va_list args) {
     if(nullptr != this->accessLogger) {
         this->accessLogger->Log(fmt, args);
         return;
     }
-    this->server->LogAccess(fmt, args);
+    this->server->logAccess(fmt, args);
 }
 
-void Location::LogError(const char* fmt, va_list args) {
+void Location::logError(const char* fmt, va_list args) {
     if(nullptr != this->errorLogger) {
         this->errorLogger->Log(fmt, args);
         return;
     }
-    this->server->LogError(fmt, args);
+    this->server->logError(fmt, args);
 }
 
-void Location::LogDebug(const char* fmt, va_list args) {
-    this->server->LogDebug(fmt, args);
+void Location::logDebug(const char* fmt, va_list args) {
+    this->server->logDebug(fmt, args);
 }
 
 int Location::initLogger() {
@@ -62,7 +62,7 @@ int Location::initLogger() {
         if (nullptr == accessLogger) {
             return 1;
         }
-        int err = accessLogger->Start();
+        int err = accessLogger->start();
         if (err) {
             delete accessLogger;
             return err;
@@ -74,7 +74,7 @@ int Location::initLogger() {
         if (nullptr == errorLogger) {
             return 1;
         }
-        int err = errorLogger->Start();
+        int err = errorLogger->start();
         if (err) {
             delete errorLogger;
             return err;
@@ -84,7 +84,7 @@ int Location::initLogger() {
     return 0;
 }
 
-int Location::Start() {
+int Location::start() {
     int err = this->initLogger();
     if (err) {
         return err;
@@ -92,7 +92,7 @@ int Location::Start() {
     return 0;
 }
 
-int Location::Reload(LocationConfig& config) {
+int Location::reload(LocationConfig& config) {
     // 重载logger
     if (this->config.accessLog != config.accessLog && this->accessLogger != nullptr) {
         delete this->accessLogger; 

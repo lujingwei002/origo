@@ -8,10 +8,10 @@ class Gate;
 class Server;
 class Client;
 
-class WebsocketHandler : public IClientHandler {
+class WebsocketClient : public IClientHandler {
 public:
-    WebsocketHandler(Gate* gate, Server* server, Client* client);
-    virtual ~WebsocketHandler();
+    WebsocketClient(Gate* gate, Server* server, Client* client);
+    virtual ~WebsocketClient();
 public:
     virtual int Unpack(const char* buffer, size_t len);
     virtual int Pack(const char* data, size_t len);
@@ -36,4 +36,4 @@ public:
     bool                                isUpgrade;
 };
 
-WebsocketHandler* NewWebsocketHandler(Gate* gate, Server* server, Client* client);
+WebsocketClient* NewWebsocketClient(Gate* gate, Server* server, Client* client);

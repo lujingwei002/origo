@@ -12,7 +12,7 @@ public:
     TcpUpstream(Upstream* upstream);
     virtual ~TcpUpstream();
 public:
-    virtual int Start();
+    virtual int start();
     virtual void TryReconnect();
     virtual void Close();
     virtual void DelayClose();

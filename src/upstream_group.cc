@@ -3,6 +3,7 @@
 #include "gate.h"
 #include "config.h"
 #include "client.h"
+#include "errors.h"
 #include "byte_array.h"
 #include <cstdlib>
 
@@ -43,7 +44,7 @@ UpstreamGroup::UpstreamGroup(Gate* gate, UpstreamGroupConfig& config) {
 }
 
 UpstreamGroup::~UpstreamGroup() {
-    this->gate->LogDebug("[upstream_group] ~UpstreamGroup");
+    this->gate->logDebug("[upstream_group] ~UpstreamGroup");
     if (this->heartbeatTimerId >= 0) {
         aeDeleteTimeEvent(this->gate->loop, this->heartbeatTimerId);
         this->heartbeatTimerId = -1;
@@ -63,7 +64,7 @@ UpstreamGroup::~UpstreamGroup() {
     this->freeBufferArr.clear();
 }
 
-int UpstreamGroup::Reload(UpstreamGroupConfig& config) {
+int UpstreamGroup::reload(UpstreamGroupConfig& config) {
     this->config.sendBufferSize = config.sendBufferSize;
     this->config.recvBufferSize = config.recvBufferSize;
     // 重载timer
@@ -101,7 +102,7 @@ int UpstreamGroup::Reload(UpstreamGroupConfig& config) {
         if (c  == config.upstreamDict.end()) {
             removeUpstreamArr.push_back(it.second);
         } else {
-            it.second->Reload(c->second);
+            it.second->reload(c->second);
         }
     }
     for (auto& it : removeUpstreamArr) {
@@ -129,15 +130,15 @@ int UpstreamGroup::initTimer() {
 }
 
 int UpstreamGroup::removeUpstream(Upstream* upstream) {
-    this->gate->LogDebug("[upstream_group] remove upstream %s", upstream->config.name.c_str());
-    upstream->Shutdown();
+    this->gate->logDebug("[upstream_group] remove upstream %s", upstream->config.name.c_str());
+    upstream->shutdown();
     return 0;
 }
 
 int UpstreamGroup::addUpstream(UpstreamConfig& config) {
-    this->gate->LogDebug("[upstream_group] add upstream %s", config.name.c_str());
+    this->gate->logDebug("[upstream_group] add upstream %s", config.name.c_str());
     Upstream* upstream = NewUpstream(this->gate, this, config);
-    int err = upstream->Start();
+    int err = upstream->start();
     if (err) {
         return err;
     }
@@ -146,8 +147,8 @@ int UpstreamGroup::addUpstream(UpstreamConfig& config) {
     return 0;
 }
 
-int UpstreamGroup::Start() {
-    this->gate->LogDebug("[upstream_group] Start, %ld", this->config.upstreamDict.size());
+int UpstreamGroup::start() {
+    this->gate->logDebug("[upstream_group] start, upstream=%ld", this->config.upstreamDict.size());
     for (auto& it : this->config.upstreamDict) {
         int err = this->addUpstream(it.second);
         if (err) {
@@ -198,7 +199,7 @@ Upstream* UpstreamGroup::SelectUpstream() {
     for (auto it : this->upstreamArr) {
         totalWeight += it->config.weight;
     }
-    this->gate->LogDebug("[upstream_group] SelectUpstream, total=%d", totalWeight);
+    this->gate->logDebug("[upstream_group] SelectUpstream, total=%d", totalWeight);
     if (totalWeight == 0) {
         return nullptr;
     }
@@ -212,7 +213,7 @@ Upstream* UpstreamGroup::SelectUpstream() {
             break;
         }
     }
-    this->gate->LogDebug("[upstream_group] SelectUpstream, total=%d, guess=%d, index=%d", totalWeight, guess, index);
+    this->gate->logDebug("[upstream_group] SelectUpstream, total=%d, guess=%d, index=%d", totalWeight, guess, index);
     if (index < 0 || index >= this->upstreamArr.size()) {
         return nullptr;
     }
@@ -220,23 +221,24 @@ Upstream* UpstreamGroup::SelectUpstream() {
     return upstream;
 }
 
-void UpstreamGroup::Shutdown() {
+int UpstreamGroup::shutdown() {
     if(this->status != group_status_start) {
         delete this;
-        return;
+        return e_upstream_group_status;
     }
     this->status = group_status_closing;
     for (auto upstream: this->upstreamArr) {
         upstream->groupShutdown();
     }
+    return 0;
 }
 
 void UpstreamGroup::onUpstreamClose(Upstream* upstream) {
-    this->gate->LogDebug("[upstream_group] onUpstreamClose");
+    this->gate->logDebug("[upstream_group] onUpstreamClose");
     if (this->status != group_status_closing) {
         return;
     }
-    this->gate->UpstreamRemove(upstream);
+    this->gate->onUpstreamRemove(upstream);
 
     this->upstreamDict.erase(upstream->config.name);
     bool found = false;
@@ -249,7 +251,7 @@ void UpstreamGroup::onUpstreamClose(Upstream* upstream) {
         }
     }
     if (!found) {
-        this->gate->LogError("[upstream_group] onUpstreamClose, error='upstream not found'");
+        this->gate->logError("[upstream_group] onUpstreamClose, error='upstream not found'");
     }
    
     if (this->upstreamArr.size() <= 0) {

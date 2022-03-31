@@ -29,7 +29,7 @@ public:
     UpstreamDriver() {}
     virtual ~UpstreamDriver(){}
 public:
-    virtual int Start() = 0;
+    virtual int start() = 0;
     virtual void TryReconnect() = 0;
     virtual void Close() = 0;
     virtual void DelayClose() = 0;
@@ -41,21 +41,21 @@ public:
     Upstream(Gate* gate, UpstreamGroup* group, UpstreamConfig& config);
     ~Upstream();
 public:
-    int Start();
+    int start();
     void Close();
     void DelayClose();
     void RecvClientNew(uint64_t sessionId);
     void RecvClientClose(uint64_t sessionId);
     void RecvClientData(uint64_t sessionId, const char* data, size_t len);
     int Unpack(const char* data, size_t len);
-    void LogDebug(const char* fmt, ...);
-    void LogError(const char* fmt, ...);
-    int Reload(UpstreamConfig& config);
+    void logDebug(const char* fmt, ...);
+    void logError(const char* fmt, ...);
+    int reload(UpstreamConfig& config);
 public:
     void TryReconnect();
     void TryHeartbeat();
     void groupShutdown();
-    void Shutdown();
+    void shutdown();
 public:
     Gate*                   gate;
     UpstreamConfig          config;

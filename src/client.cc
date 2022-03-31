@@ -4,8 +4,6 @@
 #include "errors.h"
 #include "config.h"
 #include "location.h"
-#include "handler/telnet_handler.h"
-#include "handler/websocket_handler.h"
 #include "upstream_group.h"
 #include "upstream.h"
 #include "json/json.h"
@@ -86,12 +84,12 @@ struct packet_header {
 
 static void on_read(struct aeEventLoop *eventLoop, int sockfd, void *args, int event) {
     Client* client = (Client*)args;
-    client->onRead();
+    client->evRead();
 }
 
 static void on_write(struct aeEventLoop *eventLoop, int sockfd, void *args, int event) {
     Client* client = (Client*)args;
-    client->onWrite();
+    client->evWrite();
 }
 
 Client* NewClient(Gate* gate, Server* server, int sockfd, uint64_t sessionId) {
@@ -113,7 +111,7 @@ Client::Client(Gate* gate, Server* server, int sockfd, uint64_t sessionId) {
 }
 
 Client::~Client() {
-    this->LogDebug("[client] ~Client");
+    this->logDebug("[client] ~Client");
     if(this->recvBuffer) {
         this->server->FreeBuffer(this->recvBuffer);
         this->recvBuffer = nullptr;
@@ -135,7 +133,7 @@ Client::~Client() {
     }
 }
 
-void Client::serverShutdown() {
+void Client::onServerShutdown() {
     Json::Value response;
     response["code"] = 0;
     this->replyJson(packet_type_down, response);
@@ -161,7 +159,7 @@ void Client::Close() {
 }
 
 void Client::onClose() {
-    this->LogDebug("[client] onClose");
+    this->logDebug("[client] onClose");
     if (this->status == client_status_delayclose) {
         //关闭写
         shutdown(this->sockfd, SHUT_RDWR);
@@ -169,14 +167,14 @@ void Client::onClose() {
         
     }
     if (this->upstream != nullptr) {
-        this->LogAccess("| %15s | %ld | %ld | G=>S | close |", this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
+        this->logAccess("| %15s | %ld | %ld | G=>S | close |", this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
         this->upstream->RecvClientClose(this->sessionId);
     }
     this->server->onClientClose(this);
     this->status = client_status_closed;
 }
 
-void Client::onWrite() {
+void Client::evWrite() {
     for(;;) {
         if (this->sendDeque.size() <= 0) {
             if (this->status == client_status_delayclose) {
@@ -202,7 +200,7 @@ void Client::onWrite() {
             break;
         }
         int ir = send(this->sockfd, b->front(), b->length(), 0);
-        this->LogDebug("[client] onWrite,len:%ld, result= %d", b->length(), ir);
+        this->logDebug("[client] evWrite,len:%ld, result= %d", b->length(), ir);
         if (ir > 0) {
             b->read(ir);
             if (b->length() <= 0) {
@@ -219,23 +217,23 @@ void Client::onWrite() {
 }
 
 // |buffer  begin  end capacity |
-void Client::onRead() {
+void Client::evRead() {
     for(;;) {
         int ir = recv(this->sockfd, (void*)this->recvBuffer->back(), this->recvBuffer->capacity(), 0); 
         int last_errno = errno;
-        this->LogDebug("[client] onRead, recv=%d, error=%d %s", ir, errno, strerror(errno));
+        this->logDebug("[client] evRead, recv=%d, error=%d %s", ir, errno, strerror(errno));
         if (ir == 0 || (ir == -1 && last_errno != EAGAIN)) {
             //close
             this->onClose();
             return;
         }
         if (ir == -1 && last_errno == EAGAIN) {
-            this->LogDebug("[client] onRead, no more data, wait");
+            this->logDebug("[client] evRead, no more data, wait");
             //wait data
             break;
         }
         if (this->handler == nullptr) {
-            this->LogDebug("[client] onRead, handler not found, discard data");
+            this->logDebug("[client] evRead, handler not found, discard data");
             //discard data and wait
             continue;
         }
@@ -247,7 +245,7 @@ void Client::onRead() {
             } else if(r == 0) {
                 //more data
                 if (this->recvBuffer->front() == this->recvBuffer->data() && this->recvBuffer->back() == this->recvBuffer->end()) {
-                    this->LogDebug("[client] onRead failed, error='buffer not enough'");
+                    this->logDebug("[client] evRead failed, error='buffer not enough'");
                     this->Close();
                     return;
                 } else {
@@ -262,7 +260,7 @@ void Client::onRead() {
     }
 }
 
-int Client::Start() {
+int Client::start() {
     if (this->status != client_status_none) {
         return e_status;
     }
@@ -271,7 +269,7 @@ int Client::Start() {
     getpeername(this->sockfd, (struct sockaddr*)&addr, &addrLen);
     this->remoteAddr = inet_ntoa(addr.sin_addr);
 
-    this->LogAccess("| %15s | %ld | %ld | accept a client", 
+    this->logAccess("| %15s | %ld | %ld | accept", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
 
     int flags = fcntl(this->sockfd, F_GETFL);
@@ -280,8 +278,8 @@ int Client::Start() {
 
     byte_array* recvBuffer = this->server->AllocBuffer(this->server->config.recvBufferSize);
     if (recvBuffer == nullptr) {
-        this->LogDebug("[client] Start fail, error='alloc recv buffer'");
-        return 1;
+        this->logDebug("[client] start fail, error='alloc recv buffer'");
+        return e_out_of_menory;
     }
     this->recvBuffer = recvBuffer;
     if (this->server->config.handshake) {
@@ -291,15 +289,16 @@ int Client::Start() {
         this->lastHeartbeatTime = this->server->Time();
     }
     this->startTime = this->server->Time();
-    if (this->server->config.net == "ws") {
-        this->handler = NewWebsocketHandler(this->gate, this->server, this);
-    } else if (this->server->config.net == "telnet") {
-        this->handler = NewTelnetHandler(this->gate, this);
+    IClientHandler* handler = this->server->newHandler(this);
+    if (handler == nullptr) {
+        return e_unknown_client;
     }
+    this->handler = handler;
     aeCreateFileEvent(this->gate->loop, this->sockfd, AE_READABLE, on_read, this);
     aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, on_write, this);
     return 0;
 }
+
 
 int Client::Send(const char* data, size_t len) {
     if (nullptr == this->handler) {
@@ -315,7 +314,7 @@ int Client::Send(const char* data, size_t len) {
 byte_array* Client::WillSend(size_t len) {
     if(this->sendDeque.size() <= 0 || this->sendDeque.front()->capacity() < len) {
         if (len > this->server->config.sendBufferSize) {
-            this->LogError("[client] send buffer overflow, config=%ld, expect=%ld", this->server->config.sendBufferSize, len);
+            this->logError("[client] send buffer overflow, config=%ld, expect=%ld", this->server->config.sendBufferSize, len);
             return nullptr;
         } 
         byte_array* b = this->server->AllocBuffer(this->server->config.sendBufferSize);
@@ -344,7 +343,7 @@ void Client::Recv(const char* data, size_t len) {
             this->recvPakcetHeartbeat(data, len);
         }break;
         default: {
-            this->LogDebug("[client] recv a packet, type=%d", header->opcode);
+            this->logDebug("[client] recv a packet, type=%d", header->opcode);
         }break; 
     }
     //this->Send("World", 5);
@@ -362,11 +361,11 @@ void Client::replyJson(uint8_t opcode, Json::Value& payload) {
 
     switch(opcode) {
         case packet_type_handshake:{
-            this->LogAccess("| %15s | %ld | %ld | C<=G | handshake | %s", 
+            this->logAccess("| %15s | %ld | %ld | C<=G | handshake | %s", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId, data.c_str());
         }break;
         case packet_type_down:{
-            this->LogAccess("| %15s | %ld | %ld | C<=G | down | %s", 
+            this->logAccess("| %15s | %ld | %ld | C<=G | down | %s", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId, data.c_str());
         }break;
     }
@@ -374,9 +373,9 @@ void Client::replyJson(uint8_t opcode, Json::Value& payload) {
 
 void Client::recvPakcetHandshake(const char* data, size_t len) {
 
-    this->LogDebug("[client] recv a packet, type=handshake");
+    this->logDebug("[client] recv a packet, type=handshake");
     if (this->status != client_status_start) {
-        this->LogError("[client] recvPakcetData failed, error='status error, not start'");
+        this->logError("[client] recvPakcetData failed, error='status error, not start'");
         Json::Value response;
         response["code"] = 400;
         this->replyJson(packet_type_handshake, response);
@@ -403,7 +402,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
     Json::Value root;
     // reader将Json字符串解析到root，root将包含Json里所有子元素  
     if (!reader.parse(payload, payload + len - sizeof(packet_header), root)) {
-        this->LogError("[client] recvPakcetHandshake failed, error='json parse'");
+        this->logError("[client] recvPakcetHandshake failed, error='json parse'");
         Json::Value response;
         response["code"] = 400;
         this->replyJson(packet_type_handshake, response);
@@ -411,9 +410,9 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
     }
     std::string path = root["path"].asString();
     std::string password = root["password"].asString();
-    this->LogDebug("[client] recv a packet, type=handshake, path=%s", path.c_str());
+    this->logDebug("[client] recv a packet, type=handshake, path=%s", path.c_str());
     if (this->server->config.requirepass.length() > 0 && this->server->config.requirepass != password) {
-        this->LogError("[client] recvPakcetHandshake failed, password=%s, error='password invalid'", password.c_str());
+        this->logError("[client] recvPakcetHandshake failed, password=%s, error='password invalid'", password.c_str());
         Json::Value response;
         response["code"] = 401;
         this->replyJson(packet_type_handshake, response);
@@ -421,7 +420,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
     }
     Location* location = this->server->SelectLocation(path);
     if (nullptr == location) {
-        this->LogError("[client] recvPakcetHandshake failed, path=%s, error='location not found'", path.c_str());
+        this->logError("[client] recvPakcetHandshake failed, path=%s, error='location not found'", path.c_str());
         Json::Value response;
         response["code"] = 404;
         this->replyJson(packet_type_handshake, response);
@@ -429,7 +428,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
     }
     Upstream* upstream = location->SelectUpstream();
     if (nullptr == upstream) {
-        this->LogError("[client] recvPakcetHandshake failed, path=%s, error='upstream not found'", path.c_str());
+        this->logError("[client] recvPakcetHandshake failed, path=%s, error='upstream not found'", path.c_str());
         Json::Value response;
         response["code"] = 404;
         this->replyJson(packet_type_handshake, response);
@@ -439,7 +438,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
     this->upstream = upstream;
     this->status = client_status_handshake;
 
-    this->LogAccess("| %15s | %ld | %ld | C=>G | handshake |", 
+    this->logAccess("| %15s | %ld | %ld | C=>G | handshake |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
     Json::Value response;
     response["code"] = 200;
@@ -449,16 +448,16 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
 
 void Client::recvPakcetHandshakeAck(const char* data, size_t len) { 
 
-    this->LogAccess("| %15s | %ld | %ld | C=>G | handshake ack |", 
+    this->logAccess("| %15s | %ld | %ld | C=>G | handshake ack |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
 
-    this->LogDebug("[client] recv a packet, type=handshake ack");
+    this->logDebug("[client] recv a packet, type=handshake ack");
     if (this->status != client_status_handshake) {
-        this->LogError("[client] recvPakcetHandshakeAck failed, status=%d, error='status error, handshake expect'", this->status);
+        this->logError("[client] recvPakcetHandshakeAck failed, status=%d, error='status error, handshake expect'", this->status);
         return;
     }
     if (this->upstream != nullptr) {
-        this->LogAccess("| %15s | %ld | %ld | G=>S | new |", 
+        this->logAccess("| %15s | %ld | %ld | G=>S | new |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
         this->upstream->RecvClientNew(this->sessionId);
     }
@@ -468,47 +467,47 @@ void Client::recvPakcetHandshakeAck(const char* data, size_t len) {
 
 void Client::recvPakcetData(const char* data, size_t len) { 
 
-    this->LogAccess("| %15s | %ld | %ld | C=>G | data |", 
+    this->logAccess("| %15s | %ld | %ld | C=>G | data |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
 
-    this->LogDebug("[client] recv a packet, type=data");
+    this->logDebug("[client] recv a packet, type=data");
     if (this->status != client_status_working) {
-        this->LogError("[client] recvPakcetData failed, status=%d, error='status error, working expect'", this->status);
+        this->logError("[client] recvPakcetData failed, status=%d, error='status error, working expect'", this->status);
         return;
     }
     this->lastHeartbeatTime = this->server->Time();
     const char* payload = (char*)(data) + sizeof(packet_header);
     if (this->upstream != nullptr) {
-        this->LogAccess("| %15s | %ld | %ld | G=>S | data |", 
+        this->logAccess("| %15s | %ld | %ld | G=>S | data |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
         this->upstream->RecvClientData(this->sessionId, payload, len - sizeof(packet_header));
     }
 }
 
 void Client::recvPakcetHeartbeat(const char* data, size_t len) { 
-    this->LogAccess("| %15s | %ld | %ld | C=>G | heartbeat |", 
+    this->logAccess("| %15s | %ld | %ld | C=>G | heartbeat |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
 
-    this->LogDebug("[client] recv a packet, type=heartbeat");
+    this->logDebug("[client] recv a packet, type=heartbeat");
     if (this->status != client_status_working) {
-        this->LogError("[client] recvPakcetHeartbeat failed, status=%d, error='status error, working expect'", this->status);
+        this->logError("[client] recvPakcetHeartbeat failed, status=%d, error='status error, working expect'", this->status);
         return;
     }
     this->lastHeartbeatTime = this->server->Time();
 }
 
-void Client::RecvUpstreamData(Upstream* upstream, const char* data, size_t len) {
+void Client::recvUpstreamData(Upstream* upstream, const char* data, size_t len) {
     static thread_local char buffer[65535];
     packet_header* header = (packet_header*)buffer;
     header->opcode = packet_type_data;
     memcpy(buffer + sizeof(packet_header), data, len);
     this->Send(buffer, sizeof(packet_header) + len);
 
-    this->LogAccess("| %15s | %ld | %ld | %ld | G=>C | data |", 
+    this->logAccess("| %15s | %ld | %ld | %ld | G=>C | data |", 
                 this->remoteAddr.c_str(), this->server->serverId, len, this->sessionId);
 }
 
-void Client::RecvUpstreamKick(Upstream* upstream, const char* data, size_t len) {
+void Client::recvUpstreamKick(Upstream* upstream, const char* data, size_t len) {
     static thread_local char buffer[65535];
     packet_header* header = (packet_header*)buffer;
     header->opcode = packet_type_kick;
@@ -516,36 +515,36 @@ void Client::RecvUpstreamKick(Upstream* upstream, const char* data, size_t len) 
     this->Send(buffer, sizeof(packet_header) + len);
     this->DelayClose();
 
-    this->LogAccess("| %15s | %ld | %ld | G=>C | kick |", 
+    this->logAccess("| %15s | %ld | %ld | G=>C | kick |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
 }
 
-void Client::LogAccess(const char* fmt, ...) {
+void Client::logAccess(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     if(this->location) {
-        this->location->LogAccess(fmt, args);
+        this->location->logAccess(fmt, args);
     } else {
-        this->server->LogAccess(fmt, args);
+        this->server->logAccess(fmt, args);
     }
     va_end(args);
 }
 
-void Client::LogError(const char* fmt, ...) {
+void Client::logError(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     if(this->location) {
-        this->location->LogError(fmt, args);
+        this->location->logError(fmt, args);
     } else {
-        this->server->LogError(fmt, args);
+        this->server->logError(fmt, args);
     }
     va_end(args);
 }
 
-void Client::LogDebug(const char* fmt, ...) {
+void Client::logDebug(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    this->gate->LogDebug(fmt, args);
+    this->gate->logDebug(fmt, args);
     va_end(args);
 }
 
@@ -554,7 +553,7 @@ void Client::checkHeartbeat() {
         return;
     }
     if (this->server->Time() - this->lastHeartbeatTime > this->server->config.heartbeat * 2) {
-        this->LogError("[client] %s heartbeat timeout", this->remoteAddr.c_str());
+        this->logError("[client] %s heartbeat timeout", this->remoteAddr.c_str());
         this->Close();
     }
     Json::Value response;
@@ -566,12 +565,13 @@ void Client::checkTimeout() {
         return;
     }
     if (this->server->Time() - this->startTime > this->server->config.timeout) {
-        this->LogError("[client] %s timeout", this->remoteAddr.c_str());
+        this->logAccess("| %15s | %ld | %ld | timeout", 
+                this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
         this->Close();
     }
 }
 
-int Client::locationRemove(Location* location) {
+int Client::onLocationRemove(Location* location) {
     if (location != this->location) {
         return 0;
     }
@@ -586,7 +586,7 @@ int Client::locationRemove(Location* location) {
     return 0;
 }
 
-int Client::upstreamRemove(Upstream* upstream) {
+int Client::onUpstreamRemove(Upstream* upstream) {
     if (this->upstream != upstream) {
         return 0;
     }

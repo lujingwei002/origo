@@ -1,9 +1,9 @@
-#include "handler/websocket_handler.h"
+#include "client/websocket_client.h"
 #include "server.h"
 #include "client.h"
 #include "gate.h"
-#include "sha1.h"
-#include "base64.h"
+#include "encrypt/sha1.h"
+#include "encrypt/base64.h"
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -60,7 +60,7 @@ int frame_pack(char* frame, int opcode, const char* data, size_t len) {
     header.opcode = opcode;
     header.mask = 0;//没有掩码
     if (len >= 0xffff) {
-        gate->LogError("send frame too large");
+        gate->logError("send frame too large");
         return 0;
     } else if(len >= 126) {
         header.payloadLen = 126;
@@ -81,13 +81,13 @@ int frame_pack(char* frame, int opcode, const char* data, size_t len) {
 }
 
 static int on_message_begin(http_parser* parser){
-    //this->client->LogDebug("on_message_begin");
+    //this->client->logDebug("on_message_begin");
     return 0;
 }
 
 static int on_url(http_parser* parser, const char *at, size_t length){
-    //gate->LogDebug("on_url length:%ld", length);
-    WebsocketHandler* handler = (WebsocketHandler*)parser->data;
+    //gate->logDebug("on_url length:%ld", length);
+    WebsocketClient* handler = (WebsocketClient*)parser->data;
     handler->url.assign(at, length);
     http_parser_url urlParser;
     http_parser_url_init(&urlParser);
@@ -112,19 +112,19 @@ static int on_url(http_parser* parser, const char *at, size_t length){
 }
 
 static int on_status(http_parser* parser, const char *at, size_t length){
-    //gate->LogDebug("on_status length:%d", length);
+    //gate->logDebug("on_status length:%d", length);
     return 0;
 }
 
 static int on_header_field(http_parser* parser, const char *at, size_t length){
-    //gate->LogDebug("on_header_field length:%d", length);
-    WebsocketHandler* handler = (WebsocketHandler*)parser->data;
+    //gate->logDebug("on_header_field length:%d", length);
+    WebsocketClient* handler = (WebsocketClient*)parser->data;
     handler->headerParsing.assign(at, length);
     return 0;
 }
 
 static int on_header_value(http_parser* parser, const char *at, size_t length){
-    WebsocketHandler* handler = (WebsocketHandler*)parser->data;
+    WebsocketClient* handler = (WebsocketClient*)parser->data;
     //HttpRequest* request = (HttpRequest*)parser->data;
     std::string value(at, length);
     std::string field = handler->headerParsing;
@@ -132,12 +132,12 @@ static int on_header_value(http_parser* parser, const char *at, size_t length){
     handler->onHeaderValue(field, value);
     //std::transform(value.begin(), value.end(), value.begin(), ::tolower);
     //request->headerDict[field] = value;
-    //this->client->LogDebug("on_header_value %s:%s", field.c_str(), value.c_str());
+    //this->client->logDebug("on_header_value %s:%s", field.c_str(), value.c_str());
     return 0;
 }
 
 static int on_headers_complete(http_parser* parser){
-    //gate->LogDebug("on_headers_complete");
+    //gate->logDebug("on_headers_complete");
     //HttpRequest* request = (HttpRequest*)parser->data;
     //request->Method.assign(http_method_str((http_method)parser->method));
     //std::transform(request->Method.begin(), request->Method.end(), request->Method.begin(), ::toupper);
@@ -150,13 +150,13 @@ static int on_body(http_parser* parser, const char *at, size_t length){
     //request->Body.append(at, length);
     //coord::Append(request->payload, at, length);
     //coord::Append(request->payload, 0);
-    //gate->LogDebug("on_body length:%ld", length);
+    //gate->logDebug("on_body length:%ld", length);
     return 0;
 }
 
 static int on_message_complete(http_parser* parser){
-    //gate->LogDebug("on_message_complete");
-    WebsocketHandler* handler = (WebsocketHandler*)parser->data;
+    //gate->logDebug("on_message_complete");
+    WebsocketClient* handler = (WebsocketClient*)parser->data;
     handler->onMessageComplete();
     //HttpRequest* request = (HttpRequest*)parser->data;
     //request->isComplete = true;
@@ -164,21 +164,21 @@ static int on_message_complete(http_parser* parser){
 }
 
 static int on_chunk_header(http_parser* parser){
-    //gate->LogDebug("on_chunk_header");
+    //gate->logDebug("on_chunk_header");
     return 0;
 }
 
 static int on_chunk_complete(http_parser* parser){
-    //gate->LogDebug("on_chunk_complete");    
+    //gate->logDebug("on_chunk_complete");    
     return 0;
 }
 
-WebsocketHandler* NewWebsocketHandler(Gate* gate, Server* server, Client* client) {
-    WebsocketHandler* self = new WebsocketHandler(gate, server, client);
+WebsocketClient* NewWebsocketClient(Gate* gate, Server* server, Client* client) {
+    WebsocketClient* self = new WebsocketClient(gate, server, client);
     return self;
 }
 
-WebsocketHandler::WebsocketHandler(Gate* gate, Server* server, Client* client) {
+WebsocketClient::WebsocketClient(Gate* gate, Server* server, Client* client) {
     this->gate = gate;
     this->server = server;
     this->client = client;
@@ -200,11 +200,11 @@ WebsocketHandler::WebsocketHandler(Gate* gate, Server* server, Client* client) {
     this->setting.on_chunk_complete = on_chunk_complete;
 }
 
-WebsocketHandler::~WebsocketHandler() {
+WebsocketClient::~WebsocketClient() {
 
 }
 
-void WebsocketHandler::onMessageComplete() {
+void WebsocketClient::onMessageComplete() {
     static thread_local char secret[20];
     static thread_local char acceptKey[32]; // ceil(20/3)*4
     static thread_local char dateStr[128];
@@ -248,7 +248,7 @@ Date:%s\r\n\r\n", acceptKey, dateStr);
     this->isUpgrade = true;
 }
 
-void WebsocketHandler::onHeaderValue(std::string& field, std::string& value) {
+void WebsocketClient::onHeaderValue(std::string& field, std::string& value) {
     if (field == "connection") {
         std::transform(value.begin(), value.end(), value.begin(), ::tolower);
         if(value == "upgrade") {
@@ -259,9 +259,9 @@ void WebsocketHandler::onHeaderValue(std::string& field, std::string& value) {
     }
 }
 
-int WebsocketHandler::Unpack(const char* data, size_t len) {
+int WebsocketClient::Unpack(const char* data, size_t len) {
     if (!this->isUpgrade) {
-        this->client->LogDebug("[websocket] recv http request\n%s", data);
+        this->client->logDebug("[websocket] recv http request\n%s", data);
         const char* header = strstr(data, "\r\n\r\n");
         if(header == NULL){
             return 0;
@@ -312,7 +312,7 @@ int WebsocketHandler::Unpack(const char* data, size_t len) {
                 payloadData[i] = payloadData[i] ^ mask[i % 4];
             }
         }
-        this->client->LogDebug("[websocket] recv a frame, payload len %ld", realPayloadLen);
+        this->client->logDebug("[websocket] recv a frame, payload len %ld", realPayloadLen);
         switch(header->opcode) {
             case websocket_frame_type_text:
                 {
@@ -339,25 +339,25 @@ int WebsocketHandler::Unpack(const char* data, size_t len) {
     }
 }
 
-void WebsocketHandler::recvTextFrame(const char* data, uint64_t len) {
-    this->client->LogDebug("[websocket] recvTextFrame");
+void WebsocketClient::recvTextFrame(const char* data, uint64_t len) {
+    this->client->logDebug("[websocket] recvTextFrame");
     this->client->Recv(data, len);
 }
 
-void WebsocketHandler::recvBinaryFrame(const char* data, uint64_t len) {
-    this->client->LogDebug("[websocket] recvBinaryFrame");
+void WebsocketClient::recvBinaryFrame(const char* data, uint64_t len) {
+    this->client->logDebug("[websocket] recvBinaryFrame");
     this->client->Recv(data, len);
 }
 
-void WebsocketHandler::recvCloseFrame() {
-    this->client->LogDebug("[websocket] recvCloseFrame");
+void WebsocketClient::recvCloseFrame() {
+    this->client->logDebug("[websocket] recvCloseFrame");
 }
 
-void WebsocketHandler::recvPingFrame() {
-    this->client->LogDebug("[websocket] recvPingFrame");
+void WebsocketClient::recvPingFrame() {
+    this->client->logDebug("[websocket] recvPingFrame");
 }
 
-int WebsocketHandler::Pack(const char* data, size_t len) {
+int WebsocketClient::Pack(const char* data, size_t len) {
     byte_array* frame = this->client->WillSend(websocket_frame_header_max_size + len);
     if (nullptr == frame) {
         return -1;
@@ -366,7 +366,7 @@ int WebsocketHandler::Pack(const char* data, size_t len) {
     if (frameLen <= 0) {
         return -1;
     }
-    this->client->LogDebug("[websocket] pack, len:%d", frameLen);
+    this->client->logDebug("[websocket] pack, len:%d", frameLen);
     frame->write(frameLen);
     return 0;
 }

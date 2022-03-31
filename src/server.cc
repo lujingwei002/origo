@@ -8,6 +8,9 @@
 #include "upstream_group.h"
 #include "upstream.h"
 #include "location.h"
+#include "client/telnet_client.h"
+#include "client/websocket_client.h"
+#include "client/console_client.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -26,15 +29,15 @@ enum server_status {
     server_status_closed        = 3,
 };
 
-static int _checkHeartbeatProc(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+static int _evHeartbeatProc(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     Server* server = (Server*)clientData;
-    server->checkHeartbeat();
+    server->evHeartbeat();
     return server->config.heartbeat * 1000;
 }
 
-static int _checkTimeoutProc(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+static int _evTimeoutProc(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     Server* server = (Server*)clientData;
-    server->checkTimeout();
+    server->evTimeout();
     return server->config.timeout * 1000;
 }
 
@@ -44,7 +47,7 @@ static void _aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientDat
 
 static void on_accept(struct aeEventLoop *eventLoop, int listenfd, void *args, int event) {
     Server* server = (Server*)args;
-    server->onAccept();
+    server->evAccept();
 }
 
 Server* NewServer(Gate* gate, uint64_t serverId, ServerConfig& config) {
@@ -67,7 +70,7 @@ Server::Server(Gate* gate, uint64_t serverId, ServerConfig& config) {
 }
 
 Server::~Server() {
-    this->LogDebug("[Server] ~Server");
+    this->logDebug("[Server] ~Server");
     if(this->accessLogger) {
         this->accessLogger = nullptr;
     }
@@ -101,7 +104,7 @@ Server::~Server() {
     }
 }
 
-void Server::onAccept() {
+void Server::evAccept() {
     int sockfd;
     struct sockaddr_in addr;
     socklen_t addrLen = sizeof(addr);
@@ -111,10 +114,10 @@ void Server::onAccept() {
     }
     const char* remoteAddr = inet_ntoa(addr.sin_addr);
 
-    this->LogAccess("[server] accept a client from %s", remoteAddr);
+    this->logAccess("[server] accept a client from %s", remoteAddr);
     // 每秒接受的链接数
     if (this->lastAcceptCnt > this->config.maxConnPerSec) {
-        this->LogError("[server] %s max conn per sec reach'", remoteAddr);
+        this->logError("[server] %s max conn per sec reach'", remoteAddr);
         close(sockfd);
         return;
     }
@@ -135,13 +138,13 @@ void Server::onAccept() {
 
     Client* client = NewClient(this->gate, this, sockfd, sessionId);
     if (client == nullptr) {
-        this->LogError("[server] out of memory when accept");
+        this->logError("[server] out of memory when accept");
         return;
     }
-    int err = client->Start();
+    int err = client->start();
     if (err) {
         delete client;
-        this->LogError("[server] client start failed, error=%d'", err);
+        this->logError("[server] client start failed, error=%d'", err);
         return;
     }
     this->clientDict[sessionId] = client;
@@ -153,7 +156,7 @@ int Server::initLogger() {
         if (nullptr == accessLogger) {
             return e_out_of_menory;
         }
-        int err = accessLogger->Start();
+        int err = accessLogger->start();
         if (err) {
             delete accessLogger;
             return err;
@@ -165,7 +168,7 @@ int Server::initLogger() {
         if (nullptr == errorLogger) {
             return e_out_of_menory;
         }
-        int err = errorLogger->Start();
+        int err = errorLogger->start();
         if (err) {
             delete errorLogger;
             return err;
@@ -177,39 +180,39 @@ int Server::initLogger() {
 
 int Server::initTimer() {
     if (this->heartbeatTimerId < 0 && this->config.heartbeat > 0) {
-        this->heartbeatTimerId = aeCreateTimeEvent(this->gate->loop, this->config.heartbeat * 1000, _checkHeartbeatProc, this, _aeEventFinalizerProc);
+        this->heartbeatTimerId = aeCreateTimeEvent(this->gate->loop, this->config.heartbeat * 1000, _evHeartbeatProc, this, _aeEventFinalizerProc);
         if (this->heartbeatTimerId == AE_ERR) {
-            return -1;
+            return e_ae_createtimer;
         }
     }
     if (this->timeoutTimerId < 0 && this->config.timeout > 0) {
-        this->timeoutTimerId = aeCreateTimeEvent(this->gate->loop, this->config.timeout * 1000, _checkTimeoutProc, this, _aeEventFinalizerProc);
+        this->timeoutTimerId = aeCreateTimeEvent(this->gate->loop, this->config.timeout * 1000, _evTimeoutProc, this, _aeEventFinalizerProc);
         if (this->timeoutTimerId == AE_ERR) {
-            return -1;
+            return e_ae_createtimer;
         }
     }
     return 0;
 }
 
-int Server::Start() {
+int Server::start() {
     int16_t port = this->config.port;
-
     int err = this->initLogger();
     if (err) {
         return err;
     }
-    err =  this->initTimer();
+    err = this->initTimer();
     if (err) {
         return err;
     }
-    this->LogDebug("[server] start, id=%ld, handshake=%s, port=%d", this->serverId, this->config.handshake ? "true" : "false", this->config.port);
+    this->logDebug("[server] start, id=%ld, port=%d", this->serverId, this->config.port);
     for (auto& it : this->config.locationDict) {
         Location* location = NewLocation(this->gate, this, it.second);
-        int err = location->Start();
+        int err = location->start();
         if (err) {
             delete location;
             return err;
         }
+        this->logDebug("[server] add location, path=%s", location->config.path.c_str());
         this->locationDict[location->config.path] = location;
     }
     int sockfd;
@@ -231,7 +234,7 @@ int Server::Start() {
         return e_listen;
     }
     if (AE_ERR == aeCreateFileEvent(this->gate->loop, sockfd, AE_READABLE, on_accept, (void*)this)) {
-        return 1;
+        return e_ae;
     }
     this->sockfd = sockfd;
     this->status = server_status_start;
@@ -241,22 +244,23 @@ int Server::Start() {
 void Server::onClose() {
 }
 
-void Server::Shutdown() {
+int Server::shutdown() {
     if(this->status != server_status_start) {
         delete this;
-        return;
+        return e_server_status;
     }
     this->status = server_status_closing;
     for (auto it : this->clientDict) {
-        it.second->serverShutdown();
+        it.second->onServerShutdown();
     }
+    return 0;
 }
 
 void Server::onClientClose(Client* client) {
-    this->LogDebug("[server] onClientClose");
+    this->logDebug("[server] onClientClose");
     auto it = this->clientDict.find(client->sessionId);
     if (it == this->clientDict.end()) {
-        this->LogError("[server] onClientClose, error='client not found'");
+        this->logError("[server] onClientClose, error='client not found'");
         return;
     }
     this->clientDict.erase(it);
@@ -298,32 +302,30 @@ Location* Server::SelectLocation(std::string& path) {
     return it->second;
 }
 
-void Server::RecvUpstreamData(Upstream* upstream, uint64_t sessionId, const char* data, size_t len) {
+void Server::recvUpstreamData(Upstream* upstream, uint64_t sessionId, const char* data, size_t len) {
     auto it = this->clientDict.find(sessionId);
     if (it == this->clientDict.end()) {
-        this->LogError("[server] %ld session not found when recv upstream data, %s %s", sessionId, upstream->group->config.name.c_str(), upstream->config.name.c_str());
+        this->logError("[server] %ld session not found when recv upstream data, %s %s", sessionId, upstream->group->config.name.c_str(), upstream->config.name.c_str());
         return;
     }
-    it->second->RecvUpstreamData(upstream, data, len); 
+    it->second->recvUpstreamData(upstream, data, len); 
 }
 
-void Server::RecvUpstreamKick(Upstream* upstream, uint64_t sessionId, const char* data, size_t len) {
+void Server::recvUpstreamKick(Upstream* upstream, uint64_t sessionId, const char* data, size_t len) {
     auto it = this->clientDict.find(sessionId);
     if (it == this->clientDict.end()) {
-        this->LogError("[server] %ld session not found when recv upstream kick, %s %s", sessionId, upstream->group->config.name.c_str(), upstream->config.name.c_str());
+        this->logError("[server] %ld session not found when recv upstream kick, %s %s", sessionId, upstream->group->config.name.c_str(), upstream->config.name.c_str());
         return;
     }
-    it->second->RecvUpstreamKick(upstream, data, len); 
+    it->second->recvUpstreamKick(upstream, data, len); 
 }
 
-int Server::Reload(ServerConfig& config) {
-
+int Server::reload(ServerConfig& config) {
     this->config.maintain = config.maintain;
     this->config.recvBufferSize = config.recvBufferSize;
     this->config.sendBufferSize = config.sendBufferSize;
     this->config.requirepass = config.requirepass;
     this->config.maxConnPerSec = config.maxConnPerSec;
-
     // 重载timer
     if (this->config.heartbeat != config.heartbeat) {
         this->config.heartbeat = config.heartbeat;
@@ -343,7 +345,6 @@ int Server::Reload(ServerConfig& config) {
     if (err) {
         return err;
     }
-
     // 重载logger
     if (this->config.accessLog != config.accessLog && this->accessLogger != nullptr) {
         delete this->accessLogger; 
@@ -359,17 +360,16 @@ int Server::Reload(ServerConfig& config) {
     if (err) {
         return err;
     }
-
     // 重载location
     for (auto& it : config.locationDict) {
         if (this->locationDict.find(it.second.path) == this->locationDict.end()) {
             Location* location = NewLocation(this->gate, this, it.second);
-            int err = location->Start();
+            int err = location->start();
             if (err) {
                 delete location;
                 return err;
             }
-            this->LogDebug("[server] add location %s\n", location->config.path.c_str());
+            this->logDebug("[server] add location, path=%s", location->config.path.c_str());
             this->locationDict[location->config.path] = location;
         }
     }
@@ -379,7 +379,7 @@ int Server::Reload(ServerConfig& config) {
         if (c  == config.locationDict.end()) {
             removeLocationArr.push_back(it.second);
         } else {
-            it.second->Reload(c->second);
+            it.second->reload(c->second);
         }
     }
     for (auto& it : removeLocationArr) {
@@ -388,7 +388,7 @@ int Server::Reload(ServerConfig& config) {
     return 0;
 }
 
-void Server::LogAccess(const char* fmt, ...) {
+void Server::logAccess(const char* fmt, ...) {
     if(nullptr != this->accessLogger) {
         va_list args;
         va_start(args, fmt);
@@ -398,11 +398,11 @@ void Server::LogAccess(const char* fmt, ...) {
     }
     va_list args;
     va_start(args, fmt);
-    this->gate->LogAccess(fmt, args);
+    this->gate->logAccess(fmt, args);
     va_end(args);
 }
 
-void Server::LogError(const char* fmt, ...) {
+void Server::logError(const char* fmt, ...) {
     if(nullptr != this->errorLogger) {
         va_list args;
         va_start(args, fmt);
@@ -412,63 +412,74 @@ void Server::LogError(const char* fmt, ...) {
     }
     va_list args;
     va_start(args, fmt);
-    this->gate->LogError(fmt, args);
+    this->gate->logError(fmt, args);
     va_end(args);
 }
 
-void Server::LogDebug(const char* fmt, ...) {
+void Server::logDebug(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    this->gate->LogDebug(fmt, args);
+    this->gate->logDebug(fmt, args);
     va_end(args);
 }
 
-void Server::LogAccess(const char* fmt, va_list args) {
+void Server::logAccess(const char* fmt, va_list args) {
     if(nullptr != this->accessLogger) {
         this->accessLogger->Log(fmt, args);
         return;
     }
-    this->gate->LogAccess(fmt, args);
+    this->gate->logAccess(fmt, args);
 }
 
-void Server::LogError(const char* fmt, va_list args) {
+void Server::logError(const char* fmt, va_list args) {
     if(nullptr != this->errorLogger) {
         this->errorLogger->Log(fmt, args);
         return;
     }
-    this->gate->LogError(fmt, args);
+    this->gate->logError(fmt, args);
 }
 
-void Server::LogDebug(const char* fmt, va_list args) {
-    this->gate->LogDebug(fmt, args);
+void Server::logDebug(const char* fmt, va_list args) {
+    this->gate->logDebug(fmt, args);
 }
 
-void Server::checkHeartbeat() {
+void Server::evHeartbeat() {
     for (auto it : this->clientDict) {
         it.second->checkHeartbeat();
     }
 }
 
-void Server::checkTimeout() {
+void Server::evTimeout() {
     for (auto it : this->clientDict) {
         it.second->checkTimeout();
     }
 }
 
 int Server::removeLocation(Location* location) {
-    this->LogDebug("[server] remove location %s\n", location->config.path.c_str());
+    this->logDebug("[server] remove location, path=%s", location->config.path.c_str());
     for (auto it : this->clientDict) {
-        it.second->locationRemove(location);
+        it.second->onLocationRemove(location);
     }
     this->locationDict.erase(location->config.path);
     delete location;
     return 0;
 }
 
-void Server::upstreamRemove(Upstream* upstream) {
+void Server::onUpstreamRemove(Upstream* upstream) {
     for (auto it : this->clientDict) {
-        it.second->upstreamRemove(upstream);
+        it.second->onUpstreamRemove(upstream);
     }
+}
+
+IClientHandler* Server::newHandler(Client* client) {
+    if (this->config.net == "ws") {
+        return NewWebsocketClient(this->gate, this, client);
+    } else if (this->config.net == "telnet") {
+        return NewTelnetClient(this->gate, this, client);
+    } else if (this->config.net == "ctl") {
+        return NewConsoleClient(this->gate, this, client);
+    }
+    return nullptr;
 }
 
 

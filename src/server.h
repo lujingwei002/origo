@@ -12,6 +12,7 @@ class ServerConfig;
 class Location;
 class Gate;
 class Client;
+class IClientHandler;
 class byte_array;
 class UpstreamGroup;
 class Upstream;
@@ -21,30 +22,32 @@ public:
     Server(Gate* gate, uint64_t serverId, ServerConfig& config);
     ~Server();
 public:
-    int Start();
+    int start();
     byte_array* AllocBuffer(size_t size);
     void FreeBuffer(byte_array* b);
     int Time();
     Location* SelectLocation(std::string& path);
-    void RecvUpstreamData(Upstream* upstream, uint64_t sessionId, const char* data, size_t len);
-    void RecvUpstreamKick(Upstream* upstream, uint64_t sessionId, const char* data, size_t len);
-    void LogAccess(const char* fmt, ...);
-    void LogError(const char* fmt, ...);
-    void LogDebug(const char* fmt, ...);
-    void LogAccess(const char* fmt, va_list args);
-    void LogError(const char* fmt, va_list args);
-    void LogDebug(const char* fmt, va_list args);
-    void Shutdown();
-    int Reload(ServerConfig& config);
-    void upstreamRemove(Upstream* upstream);
+    void recvUpstreamData(Upstream* upstream, uint64_t sessionId, const char* data, size_t len);
+    void recvUpstreamKick(Upstream* upstream, uint64_t sessionId, const char* data, size_t len);
+    void logAccess(const char* fmt, ...);
+    void logError(const char* fmt, ...);
+    void logDebug(const char* fmt, ...);
+    void logAccess(const char* fmt, va_list args);
+    void logError(const char* fmt, va_list args);
+    void logDebug(const char* fmt, va_list args);
+    int shutdown();
+    int reload(ServerConfig& config);
+    void onUpstreamRemove(Upstream* upstream);
+    void onClientClose(Client* client);
+    IClientHandler* newHandler(Client* client);
 public:
+    void evAccept();
+    void evTimeout();
+    void evHeartbeat();
+private:
+    void onClose();
     int initLogger();
     int initTimer();
-    void onClose();
-    void onAccept();
-    void onClientClose(Client* client);
-    void checkHeartbeat();
-    void checkTimeout();
     int removeLocation(Location* location);
 public:
     int                                 sockfd;

@@ -17,17 +17,17 @@ public:
     UpstreamGroup(Gate* gate, UpstreamGroupConfig& config);
     ~UpstreamGroup();
 public:
-    int Start();
+    int start();
     byte_array* AllocBuffer(size_t size);
     void FreeBuffer(byte_array* b);
     Upstream* SelectUpstream();
 public:
     void TryReconnect();
     void TryHeartbeat();
-    void Shutdown();
+    int shutdown();
     void onUpstreamClose(Upstream* upstream);
     int initTimer();
-    int Reload(UpstreamGroupConfig& config);
+    int reload(UpstreamGroupConfig& config);
     int addUpstream(UpstreamConfig& config);
     int removeUpstream(Upstream* upstream);
 public:

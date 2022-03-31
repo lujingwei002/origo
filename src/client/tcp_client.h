@@ -3,10 +3,10 @@
 class Gate;
 class Client;
 
-class TcpHandler : public IClientHandler {
+class TcpClient : public IClientHandler {
 public:
-    TcpHandler(Gate* gate, Client* client);
-    virtual ~TcpHandler();
+    TcpClient(Gate* gate, Client* client);
+    virtual ~TcpClient();
 public:
     virtual int Unpack(const char* buffer, size_t len);
     virtual int Pack(const char* data, size_t len);
@@ -15,4 +15,4 @@ public:
     Client* client;
 };
 
-TcpHandler* NewTcpHandler(Gate* gate, Client* client);
+TcpClient* NewTcpClient(Gate* gate, Client* client);

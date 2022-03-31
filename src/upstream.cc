@@ -110,14 +110,14 @@ int Upstream::Unpack(const char* data, size_t len) {
     switch(header.opcode) {
         case packet_type_kick:
             {
-                this->gate->RecvUpstreamKick(this, sessionId, data + sizeof(packet_header), len - sizeof(packet_header));
+                this->gate->recvUpstreamKick(this, sessionId, data + sizeof(packet_header), len - sizeof(packet_header));
             }break;
         case packet_type_data:
             {
-                this->gate->RecvUpstreamData(this, sessionId, data + sizeof(packet_header), len - sizeof(packet_header));
+                this->gate->recvUpstreamData(this, sessionId, data + sizeof(packet_header), len - sizeof(packet_header));
             }break;
         default: {
-            this->LogError("[upstream] Unpack fail, opcode=%d, error='opcode error'", header.opcode);
+            this->logError("[upstream] Unpack fail, opcode=%d, error='opcode error'", header.opcode);
         }
     }
     return sizeof(uint16_t) + header.length;
@@ -141,9 +141,9 @@ void Upstream::TryHeartbeat() {
     this->driver->RecvClientData((const char*)&header, sizeof(packet_header), nullptr, 0);
 }
 
-int Upstream::Start() {
+int Upstream::start() {
     if (this->status != upstream_status_none) {
-        this->LogError("[upstream] Start fail, status=%d, error='status error'", this->status);
+        this->logError("[upstream] start fail, status=%d, error='status error'", this->status);
         return e_status;
     }
     UpstreamDriver* driver = nullptr;
@@ -153,7 +153,7 @@ int Upstream::Start() {
     if (nullptr == driver) {
         return e_out_of_menory;
     }
-    int err = driver->Start();;
+    int err = driver->start();;
     if (err) {
         delete driver;
         return err;
@@ -163,7 +163,7 @@ int Upstream::Start() {
 }
 
 void Upstream::RecvClientNew(uint64_t sessionId) {
-    this->LogDebug("[upstream] RecvClientNew, sessionId=%ld", sessionId);
+    this->logDebug("[upstream] RecvClientNew, sessionId=%ld", sessionId);
     if (nullptr == this->driver) {
         return;
     }
@@ -178,7 +178,7 @@ void Upstream::RecvClientNew(uint64_t sessionId) {
 }
 
 void Upstream::RecvClientClose(uint64_t sessionId) {
-    this->LogDebug("[upstream] RecvClientClose, sessionId=%ld", sessionId);
+    this->logDebug("[upstream] RecvClientClose, sessionId=%ld", sessionId);
     if (nullptr == this->driver) {
         return;
     }
@@ -190,7 +190,7 @@ void Upstream::RecvClientClose(uint64_t sessionId) {
 }
 
 void Upstream::RecvClientData(uint64_t sessionId, const char* data, size_t len) { 
-    this->LogDebug("[upstream] RecvClientData, sessionId=%ld, len=%ld", sessionId, len);
+    this->logDebug("[upstream] RecvClientData, sessionId=%ld, len=%ld", sessionId, len);
     if (nullptr == this->driver) {
         return;
     }
@@ -201,17 +201,17 @@ void Upstream::RecvClientData(uint64_t sessionId, const char* data, size_t len) 
     this->driver->RecvClientData((const char*)&header, sizeof(packet_header), data, len);
 }
 
-void Upstream::LogDebug(const char* fmt, ...) {
+void Upstream::logDebug(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    this->gate->LogDebug(fmt, args);
+    this->gate->logDebug(fmt, args);
     va_end(args);
 }
 
-void Upstream::LogError(const char* fmt, ...) {
+void Upstream::logError(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    this->gate->LogError(fmt, args);
+    this->gate->logError(fmt, args);
     va_end(args);
 }
 
@@ -223,7 +223,7 @@ void Upstream::groupShutdown() {
     this->driver->RecvClientData((const char*)&header, sizeof(packet_header), nullptr, 0);
     this->DelayClose();
 }
-void Upstream::Shutdown() {
+void Upstream::shutdown() {
     packet_header header;
     header.opcode = packet_type_down;
     header.length = htons(sizeof(packet_header) - sizeof(uint16_t));
@@ -232,7 +232,7 @@ void Upstream::Shutdown() {
     this->DelayClose();
 }
 
-int Upstream::Reload(UpstreamConfig& config) {
+int Upstream::reload(UpstreamConfig& config) {
     this->config = config;
     return 0;
 }

@@ -27,31 +27,31 @@ public:
     Client(Gate* gate, Server* server, int sockfd, uint64_t sessionId);
     ~Client();
 public:
-    int Start();
+    int start();
     void Close();
     void DelayClose();
     int Send(const char* data, size_t len);
     byte_array* WillSend(size_t len);
     void Recv(const char* data, size_t len);
-    void RecvUpstreamData(Upstream* upstream, const char* data, size_t len);
-    void RecvUpstreamKick(Upstream* upstream, const char* data, size_t len);
-    void LogAccess(const char* fmt, ...);
-    void LogError(const char* fmt, ...);
-    void LogDebug(const char* fmt, ...);
-public:
+    void recvUpstreamData(Upstream* upstream, const char* data, size_t len);
+    void recvUpstreamKick(Upstream* upstream, const char* data, size_t len);
+    void logAccess(const char* fmt, ...);
+    void logError(const char* fmt, ...);
+    void logDebug(const char* fmt, ...);
+    void checkHeartbeat();
+    void checkTimeout();
+    void evRead();
+    void evWrite();
+    void onServerShutdown();
+    int onUpstreamRemove(Upstream* upstream);
+    int onLocationRemove(Location* location);
+private:
     void onClose();
-    void onRead();
-    void onWrite();
     void recvPakcetHandshake(const char* data, size_t len);
     void recvPakcetHandshakeAck(const char* data, size_t len);
     void recvPakcetData(const char* data, size_t len);
     void recvPakcetHeartbeat(const char* data, size_t len);
     void replyJson(uint8_t opcode, Json::Value& payload);
-    void checkHeartbeat();
-    void checkTimeout();
-    void serverShutdown();
-    int locationRemove(Location* location);
-    int upstreamRemove(Upstream* upstream);
 public:
     Gate*                   gate;
     Server*                 server;

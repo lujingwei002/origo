@@ -36,7 +36,7 @@ static void sig_int(int b) {
     if (gate == nullptr) {
         exit(0);
     }
-    gate->Shutdown();
+    gate->shutdown();
 }
 
 static void sig_usr1(int b) {
@@ -44,7 +44,7 @@ static void sig_usr1(int b) {
     if (gate == nullptr) {
         exit(0);
     }
-    gate->Shutdown();
+    gate->shutdown();
 }
 
 static void sig_usr2(int b) {
@@ -52,7 +52,7 @@ static void sig_usr2(int b) {
     if (gate == nullptr) {
         exit(0);
     }
-    gate->Reload();
+    gate->reload();
 }
 
 Gate::Gate() {
@@ -77,7 +77,7 @@ Gate::~Gate() {
     }
 }
 
-void Gate::Shutdown() {
+void Gate::shutdown() {
     if (this->status != gate_status_start){
         return;
     }
@@ -126,7 +126,7 @@ int Gate::reload(Config* config) {
         if (c  == config->serverDict.end()) {
             removeServerArr.push_back(it.second);
         } else {
-            it.second->Reload(c->second);
+            it.second->reload(c->second);
         }
     }
     for (auto&it : removeServerArr) {
@@ -150,7 +150,7 @@ int Gate::reload(Config* config) {
         if (c  == config->upstreamGroupDict.end()) {
             removeUpstreamGroupArr.push_back(it.second);
         } else {
-            it.second->Reload(c->second);
+            it.second->reload(c->second);
         }
     }
     for (auto&it : removeUpstreamGroupArr) {
@@ -159,29 +159,29 @@ int Gate::reload(Config* config) {
     return 0;
 }
 
-void Gate::Reload() {
+void Gate::reload() {
     try {
         Config* config = NewConfig();
         int err = config->Parse(this->configureFilePath.c_str());
         if (err) {
-            fprintf(stderr, "reload failed, error=%d\n", err);
+            this->logError("reload failed, error=%d", err);
             return;
         }
         err = this->reload(config);
         if (err) {
-            fprintf(stderr, "reload failed, error=%d\n", err);
+            this->logError("reload failed, error=%d", err);
             return;
         }
     }catch(std::exception& e) {
-        fprintf(stderr, "reload failed, exception=%s\n", e.what());
+        this->logError("reload failed, exception=%s", e.what());
         return;
     }catch(...) {
-        fprintf(stderr, "aaaa\n");
+        this->logError("reload failed");
         return;
     }
 }
 
-int Gate::Forver() {
+int Gate::forver() {
     return 0;
 }
 
@@ -209,9 +209,9 @@ int Gate::initLogger() {
     if (this->accessLogger == nullptr && this->config->accessLog.length() > 0) {
         Logger* accessLogger = NewLogger(this->config->accessLog.c_str());
         if (nullptr == accessLogger) {
-            throw out_of_memory();
+            return e_out_of_menory;
         }
-        int err = accessLogger->Start();
+        int err = accessLogger->start();
         if (err) {
             delete accessLogger;
             return err;
@@ -221,10 +221,9 @@ int Gate::initLogger() {
     if (this->errorLogger == nullptr && this->config->errorLog.length() > 0) {
         Logger* errorLogger = NewLogger(this->config->errorLog.c_str());
         if (nullptr == errorLogger) {
-            throw out_of_memory();
-            return 1;
+            return e_out_of_menory;
         }
-        int err = errorLogger->Start();
+        int err = errorLogger->start();
         if (err) {
             delete errorLogger;
             return err;
@@ -234,9 +233,9 @@ int Gate::initLogger() {
     if (this->debugLogger == nullptr && this->config->debugLog.length() > 0) {
         Logger* debugLogger = NewLogger(this->config->debugLog.c_str());
         if (nullptr == debugLogger) {
-            return 1;
+            return e_out_of_menory;
         }
-        int err = debugLogger->Start();
+        int err = debugLogger->start();
         if (err) {
             delete debugLogger;
             return err;
@@ -257,17 +256,16 @@ int Gate::initServer() {
 }
 
 int Gate::removeServer(Server* server) {
-    this->LogDebug("[gate] remove server %s", server->config.name.c_str());
+    this->logDebug("[gate] remove server %s", server->config.name.c_str());
     this->serverDict.erase(server->serverId);
     this->name2Server.erase(server->config.name);
-    server->Shutdown();
-    return 0;
+    return server->shutdown();
 }
 
 int Gate::addServer(ServerConfig& config) {
     uint64_t serverId = ++this->serverId;
     Server* server = NewServer(this, serverId, config);
-    int err = server->Start();
+    int err = server->start();
     if (err) {
         delete server;
         return err;
@@ -287,17 +285,16 @@ int Gate::initUpstream() {
     return 0;
 }
 
-void Gate::UpstreamRemove(Upstream* upstream) {
+void Gate::onUpstreamRemove(Upstream* upstream) {
     for (auto& it : this->serverDict) {
-        it.second->upstreamRemove(upstream);
+        it.second->onUpstreamRemove(upstream);
     }
 }
 
 int Gate::removeUpstreamGroup(UpstreamGroup* group) {
-    this->LogDebug("[gate] remove upstream group %s", group->config.name.c_str());
+    this->logDebug("[gate] remove upstream group %s", group->config.name.c_str());
     this->upstreamGroupDict.erase(group->config.name);
-    group->Shutdown();
-    return 0;
+    return group->shutdown();
 }
 
 int Gate::addUpstreamGroup(UpstreamGroupConfig& config) {
@@ -305,7 +302,7 @@ int Gate::addUpstreamGroup(UpstreamGroupConfig& config) {
     if (group == nullptr) {
         return e_out_of_menory;
     }
-    int err = group->Start();
+    int err = group->start();
     if (err) {
         delete group;
         return err;
@@ -319,7 +316,6 @@ int Gate::initDaemon() {
     bool daemon = false;
     if (arguments.daemon) daemon = true;
     if (this->config->daemon) daemon = true;
-    
     if (daemon) {
         int pid;
         pid = fork();
@@ -340,15 +336,14 @@ int Gate::initDaemon() {
 }
 
 int Gate::tryLockPid() {
-    static char what[1024];
     int fd = open(this->config->pid.c_str(), O_RDWR|O_CREAT, 0755);
     if (fd < 0) {
-        sprintf(what, "Open pid failed %s", this->config->pid.c_str());
-        throw exception(what);
+        fprintf(stderr, "open pid failed, path=%s", this->config->pid.c_str());
+        return e_open_pid_file;
     }
     if (flock(fd, LOCK_EX|LOCK_NB) < 0) {
-        sprintf(what, "Lock pid failed %s", this->config->pid.c_str());
-        throw exception(what);
+        fprintf(stderr, "lock pid failed, path=%s", this->config->pid.c_str());
+        return e_lock_pid_file;
     }
     return 0;
 }
@@ -357,6 +352,7 @@ int Gate::run() {
     std::ofstream pidfile(this->config->pid);
     pidfile << getpid() << std::endl;
     pidfile.close();
+
     this->status = gate_status_start;
     aeMain(this->loop);
     this->status = gate_status_closed;
@@ -365,9 +361,9 @@ int Gate::run() {
     return 0;
 }
 
-int Gate::Main() {
+int Gate::main() {
     if (this->status != gate_status_none) {
-        return e_status;
+        return e_gate_status;
     }
     this->configureFilePath = arguments.configureFilePath;
     int err = this->config->Parse(this->configureFilePath.c_str());
@@ -400,10 +396,9 @@ int Gate::Main() {
         return err;
     }
     return this->run();
-    return 0;
 }
 
-UpstreamGroup* Gate::SelectUpstreamGroup(std::string& path) {
+UpstreamGroup* Gate::selectUpstreamGroup(std::string& path) {
     auto it = this->upstreamGroupDict.find(path);
     if (it == this->upstreamGroupDict.end()) {
         return nullptr;
@@ -411,29 +406,29 @@ UpstreamGroup* Gate::SelectUpstreamGroup(std::string& path) {
     return it->second;
 }
 
-void Gate::RecvUpstreamData(Upstream* upstream, uint64_t sessionId, const char* data, size_t len) {
-    this->LogDebug("[gate] RecvUpstreamData");
+void Gate::recvUpstreamData(Upstream* upstream, uint64_t sessionId, const char* data, size_t len) {
+    this->logDebug("[gate] recvUpstreamData");
     uint64_t serverId = sessionId >> 50;
     auto it = this->serverDict.find(serverId);
     if (it == this->serverDict.end()) {
-        this->LogError("[gate] %ld server not found when recv upstream data, %s %s", serverId, upstream->group->config.name.c_str(), upstream->config.name.c_str());
+        this->logError("[gate] %ld server not found when recv upstream data, %s %s", serverId, upstream->group->config.name.c_str(), upstream->config.name.c_str());
         return;
     }
-    it->second->RecvUpstreamData(upstream, sessionId, data, len); 
+    it->second->recvUpstreamData(upstream, sessionId, data, len); 
 }
 
-void Gate::RecvUpstreamKick(Upstream* upstream, uint64_t sessionId, const char* data, size_t len) {
-    this->LogDebug("[gate] RecvUpstreamKick");
+void Gate::recvUpstreamKick(Upstream* upstream, uint64_t sessionId, const char* data, size_t len) {
+    this->logDebug("[gate] recvUpstreamKick");
     uint64_t serverId = sessionId >> 50;
     auto it = this->serverDict.find(serverId);
     if (it == this->serverDict.end()) {
-        this->LogError("[gate] %ld server not found when recv upstream kick, %s %s", serverId, upstream->group->config.name.c_str(), upstream->config.name.c_str());
+        this->logError("[gate] %ld server not found when recv upstream kick, %s %s", serverId, upstream->group->config.name.c_str(), upstream->config.name.c_str());
         return;
     }
-    it->second->RecvUpstreamKick(upstream, sessionId, data, len); 
+    it->second->recvUpstreamKick(upstream, sessionId, data, len); 
 }
 
-void Gate::LogAccess(const char* fmt, ...) {
+void Gate::logAccess(const char* fmt, ...) {
     if(nullptr == this->accessLogger) {
         return;
     }
@@ -443,7 +438,7 @@ void Gate::LogAccess(const char* fmt, ...) {
     va_end(args);
 }
 
-void Gate::LogError(const char* fmt, ...) {
+void Gate::logError(const char* fmt, ...) {
     if(nullptr == this->errorLogger) {
         return;
     }
@@ -453,7 +448,7 @@ void Gate::LogError(const char* fmt, ...) {
     va_end(args);
 }
 
-void Gate::LogDebug(const char* fmt, ...) {
+void Gate::logDebug(const char* fmt, ...) {
     if(nullptr == this->debugLogger) {
         return;
     }
@@ -463,21 +458,21 @@ void Gate::LogDebug(const char* fmt, ...) {
     va_end(args);
 }
 
-void Gate::LogAccess(const char* fmt, va_list args) {
+void Gate::logAccess(const char* fmt, va_list args) {
     if(nullptr == this->accessLogger) {
         return;
     }
     this->accessLogger->Log(fmt, args);
 }
 
-void Gate::LogError(const char* fmt, va_list args) {
+void Gate::logError(const char* fmt, va_list args) {
     if(nullptr == this->errorLogger) {
         return;
     }
     this->errorLogger->Log(fmt, args);
 }
 
-void Gate::LogDebug(const char* fmt, va_list args) {
+void Gate::logDebug(const char* fmt, va_list args) {
     if(nullptr == this->debugLogger) {
         return;
     }

@@ -12,12 +12,12 @@ public:
     Location(Gate* gate, Server* server, LocationConfig& config);
     ~Location();
 public:
-    void LogAccess(const char* fmt, va_list args);
-    void LogError(const char* fmt, va_list args);
-    void LogDebug(const char* fmt, va_list args);
+    void logAccess(const char* fmt, va_list args);
+    void logError(const char* fmt, va_list args);
+    void logDebug(const char* fmt, va_list args);
     Upstream* SelectUpstream();
-    int Start();
-    int Reload(LocationConfig& config);
+    int start();
+    int reload(LocationConfig& config);
 private:
     int initLogger();
 public:

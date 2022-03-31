@@ -48,8 +48,8 @@ static int actionServerReload(Config* config) {
 }
 
 static int actionHelp() {
-    printf(R"(longg version: 
-Usage: longg
+    printf(R"(origo version: 
+Usage: origo 
 
 Options:
   -?,-h         : this help
@@ -70,7 +70,7 @@ static const struct option longopts[] = {
 int main(int argc, char** argv) {
     int c;
 	int idx;
-	while ((c =getopt_long(argc, argv, shortopts, longopts, &idx)) != -1){
+	while ((c = getopt_long(argc, argv, shortopts, longopts, &idx)) != -1){
         switch(c) {
             case 'h':{
                 arguments.help = true;
@@ -121,15 +121,14 @@ int main(int argc, char** argv) {
             if (nullptr == gate) {
                 return e_out_of_menory;
             }
-            int err = gate->Main();
+            int err = gate->main();
             return err;
         }
     }catch(std::exception& e) {
-            fprintf(stderr, "%s\n", e.what());
-            return 1;
-     }catch(...) {
-            printf("aaaa\n");
-            return 1;
-
+        fprintf(stderr, "%s\n", e.what());
+        return 1;
+    }catch(...) {
+        fprintf(stderr, "catch exception\n");
+        return 1;
     }
 }

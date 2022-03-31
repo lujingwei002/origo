@@ -15,7 +15,8 @@ include_directories (dep/ae)
 
 #源文件
 aux_source_directory (src SRC_LIST)
-aux_source_directory (src/handler SRC_LIST)
+aux_source_directory (src/client SRC_LIST)
+aux_source_directory (src/encrypt SRC_LIST)
 aux_source_directory (src/upstream SRC_LIST)
 
 #库文件
