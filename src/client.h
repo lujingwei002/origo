@@ -29,8 +29,7 @@ public:
 public:
     int start();
     void Close();
-    void DelayClose();
-    int Send(const char* data, size_t len);
+    int sendRaw(const char* data, size_t len);
     byte_array* WillSend(size_t len);
     void Recv(const char* data, size_t len);
     void recvUpstreamData(Upstream* upstream, const char* data, size_t len);
@@ -45,6 +44,7 @@ public:
     void onServerShutdown();
     int onUpstreamRemove(Upstream* upstream);
     int onLocationRemove(Location* location);
+    void delayClose();
 private:
     void onClose();
     void recvPakcetHandshake(const char* data, size_t len);

@@ -17,9 +17,9 @@ public:
     ~Gate();
 public:
     int main();
-    void shutdown();
+    int shutdown();
     int forver();
-    void reload();
+    int reload();
     int reload(Config* config);
     UpstreamGroup* selectUpstreamGroup(std::string& path);
     void recvUpstreamData(Upstream* upstream, uint64_t sessionId, const char* data, size_t len);

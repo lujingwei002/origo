@@ -86,7 +86,6 @@ int UpstreamGroup::reload(UpstreamGroupConfig& config) {
     if (err) {
         return err;
     }
-
     // 新增upstream
     for (auto& it : config.upstreamDict) {
         if (this->upstreamDict.find(it.second.name) == this->upstreamDict.end()) {
@@ -108,7 +107,6 @@ int UpstreamGroup::reload(UpstreamGroupConfig& config) {
     for (auto& it : removeUpstreamArr) {
         this->removeUpstream(it);
     }
-
     return 0;
 }
 
@@ -239,7 +237,6 @@ void UpstreamGroup::onUpstreamClose(Upstream* upstream) {
         return;
     }
     this->gate->onUpstreamRemove(upstream);
-
     this->upstreamDict.erase(upstream->config.name);
     bool found = false;
     for (auto it = this->upstreamArr.begin(); it != this->upstreamArr.end(); ++it) {
@@ -253,11 +250,9 @@ void UpstreamGroup::onUpstreamClose(Upstream* upstream) {
     if (!found) {
         this->gate->logError("[upstream_group] onUpstreamClose, error='upstream not found'");
     }
-   
     if (this->upstreamArr.size() <= 0) {
         delete this;
     }
-    
 }
 
 

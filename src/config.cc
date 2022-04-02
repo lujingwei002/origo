@@ -39,10 +39,6 @@ return 0;
           return e_config_syntax;\
       }\
       self.k2 = atoi(_args[1].c_str());\
-      if(self.k2 == 0){\
-          throw exception(this->curLine+" expected integer");\
-          return e_config_syntax;\
-      }\
     } 
 
 #define READ_STRING(k1, k2) \
@@ -267,6 +263,7 @@ int Config::upstreamBegin(UpstreamGroupConfig& self, std::vector<std::string>& _
     READ_BEGIN()
     READ_INT("heartbeat", heartbeat)
     READ_INT("reconnect", reconnect)
+    READ_STRING("password", password)
     READ_INT("send_buffer_size", sendBufferSize)
     READ_INT("recv_buffer_size", recvBufferSize)
     else if(_args[0] == "tcp") {
@@ -291,7 +288,31 @@ int Config::upstreamBegin(UpstreamGroupConfig& self, std::vector<std::string>& _
         if (_args.size() > 2 && _args[2].find("weight=") == 0) {
             upstreamConf.weight = atoi(_args[2].substr(7).c_str());
         }
+        self.upstreamDict[upstreamConf.name] = upstreamConf;    
+    } else if(_args[0] == "redis") {
+        if (_args.size() < 2) {
+            throw exception(this->curLine+" syntax error");
+            return e_config_syntax;
+        }
+        UpstreamConfig upstreamConf;
+        upstreamConf.type = _args[0];
+        upstreamConf.addr = _args[1];
+        upstreamConf.name = upstreamConf.type + "://" + upstreamConf.addr;
+        if (upstreamConf.addr.find(":") == std::string::npos) {
+            throw exception(this->curLine+" syntax error");
+            return e_config_syntax;
+        }
+        upstreamConf.host = upstreamConf.addr.substr(0, upstreamConf.addr.find(":"));
+        upstreamConf.port = atoi(upstreamConf.addr.substr(upstreamConf.addr.find(":") + 1).c_str());
+        if(upstreamConf.port == 0) {
+            throw exception(this->curLine+" syntax error");
+            return e_config_syntax;
+        }
+        if (_args.size() > 2 && _args[2].find("weight=") == 0) {
+            upstreamConf.weight = atoi(_args[2].substr(7).c_str());
+        }
         self.upstreamDict[upstreamConf.name] = upstreamConf;
+
     }
     READ_END()
 }
@@ -351,6 +372,7 @@ void UpstreamGroupConfig::DebugString(std::stringstream& buffer, int level) {
     buffer << std::setfill(' ') << std::setw((level-1)*4) << " " << "upstream " << this->name << std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "heartbeat:" << this->heartbeat << std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "reconnect:" << this->reconnect << std::endl;
+    buffer << std::setfill(' ') << std::setw(level*4) << " " << "password:" << this->password << std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "recv_buffer_size:" << this->recvBufferSize << std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "send_buffer_size:" << this->sendBufferSize << std::endl;
     for (auto& it : this->upstreamDict) {

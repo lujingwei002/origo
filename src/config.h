@@ -43,6 +43,7 @@ public:
     void DebugString(std::stringstream& buffer, int level);
 public:
     std::string                             name;
+    std::string                             password;
     int16_t                                 heartbeat;
     int16_t                                 reconnect;
     uint16_t                                sendBufferSize;

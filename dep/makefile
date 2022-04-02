@@ -52,12 +52,42 @@ $(HTTPPARSER_DIR)/install:
 	rm -rf ../include/http-parser;mkdir ../include/http-parser
 	cp -rf $(HTTPPARSER_DIR)/*.h ../include/http-parser
 
-fetch: $(JSONCPP_DIR) $(HTTPPARSER_DIR)
+HIREDIS_VERSION=1.0.2
+HIREDIS_DIR=hiredis-$(HIREDIS_VERSION)
+HIREDIS_LIB=$(HIREDIS_DIR)/libhiredis.a
 
-default: $(JSONCPP_LIB) $(HTTPPARSER_LIB)
+$(HIREDIS_DIR):
+	@echo
+	@echo "=== Downloading hiredis $(HIREDIS_VERSION) ==="
+	@echo
+	curl "https://codeload.github.com/redis/hiredis/tar.gz/refs/tags/v$(HIREDIS_VERSION)" | tar xz
 
-clean: $(JSONCPP_DIR)/clean
+$(HIREDIS_LIB): 
+	mkdir $(HIREDIS_DIR)/build
+	cd $(HIREDIS_DIR)/build; cmake ..
+	$(MAKE) -C $(HIREDIS_DIR)/build 
+
+$(HIREDIS_DIR)/clean:
+	$(MAKE) -C $(HIREDIS_DIR)/build clean
+	rm -rf $(HIREDIS_DIR)/build
+
+$(HIREDIS_DIR)/install:
+	@echo '=== install hiredis ==='
+	@mkdir -p ../lib
+	@mkdir -p ../include
+	cp $(HIREDIS_LIB) ../lib
+	rm -rf ../include/hiredis
+	mkdir ../include/hiredis
+	cp -rf $(HIREDIS_DIR)/*.h ../include/hiredis
+	cp -rf $(HIREDIS_DIR)/adapters ../include/hiredis/adapters
+
+
+fetch: $(JSONCPP_DIR) $(HTTPPARSER_DIR) $(HIREDIS_DIR)
+
+default: $(JSONCPP_LIB) $(HTTPPARSER_LIB) $(HIREDIS_LIB)
+
+clean: $(JSONCPP_DIR)/clean $(HIREDIS_DIR)/clean
 
 .PYHONY: default fetch clean
 
-install: $(JSONCPP_DIR)/install $(HTTPPARSER_DIR)/install
+install: $(JSONCPP_DIR)/install $(HTTPPARSER_DIR)/install $(HIREDIS_DIR)/install

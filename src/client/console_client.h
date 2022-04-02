@@ -10,7 +10,17 @@ public:
     virtual ~ConsoleClient();
 public:
     virtual int Unpack(const char* buffer, size_t len);
-    virtual int Pack(const char* data, size_t len) {return 0;}
+    virtual int Pack(const char* data, size_t len);
+    int handleAuth(int argc, char** argv);
+    int handleLogin(int argc, char** argv);
+    int handleReload(int argc, char** argv);
+    int handleShutdown(int argc, char** argv);
+    int handleHelp(int argc, char** argv);
+private:
+    void recvPakcetHandshake(const char* data, size_t len);
+    void reply(const char* data, size_t len);
+    void replyf(const char* fmt, ...);
+    int handleCommand(int argc, char** argv);
 public:
     Gate*   gate;
     Client* client;

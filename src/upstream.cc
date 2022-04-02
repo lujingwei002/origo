@@ -1,6 +1,7 @@
 #include "upstream.h"
 #include "upstream_group.h"
 #include "upstream/tcp_upstream.h"
+#include "upstream/redis_upstream.h"
 #include "gate.h"
 #include "config.h"
 #include "client.h"
@@ -148,7 +149,9 @@ int Upstream::start() {
     }
     UpstreamDriver* driver = nullptr;
     if (this->config.type == "tcp") {
-        driver = new TcpUpstream(this);
+        driver = NewTcpUpstream(this);
+    } else if (this->config.type == "redis") {
+        driver = NewRedisUpstream(this);
     }
     if (nullptr == driver) {
         return e_out_of_menory;

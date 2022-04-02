@@ -77,12 +77,13 @@ Gate::~Gate() {
     }
 }
 
-void Gate::shutdown() {
+int Gate::shutdown() {
     if (this->status != gate_status_start){
-        return;
+        return e_gate_status;
     }
     this->status = gate_status_closing;
     aeStop(this->loop);
+    return 0;
 }
 
 int Gate::reload(Config* config) {
@@ -159,25 +160,26 @@ int Gate::reload(Config* config) {
     return 0;
 }
 
-void Gate::reload() {
+int Gate::reload() {
     try {
         Config* config = NewConfig();
         int err = config->Parse(this->configureFilePath.c_str());
         if (err) {
             this->logError("reload failed, error=%d", err);
-            return;
+            return e_gate_reload;
         }
         err = this->reload(config);
         if (err) {
             this->logError("reload failed, error=%d", err);
-            return;
+            return e_gate_reload;
         }
+        return 0;
     }catch(std::exception& e) {
         this->logError("reload failed, exception=%s", e.what());
-        return;
+        return e_gate_reload;
     }catch(...) {
         this->logError("reload failed");
-        return;
+        return e_gate_reload;
     }
 }
 

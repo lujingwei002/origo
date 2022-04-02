@@ -22,11 +22,13 @@ aux_source_directory (src/upstream SRC_LIST)
 #库文件
 find_library(HTTP_PARSER_LIB http_parser HINTS ${PROJECT_SOURCE_DIR}/lib/)
 find_library(JSONCPP_LIB jsoncpp HINTS ${PROJECT_SOURCE_DIR}/lib/)
+find_library(HIREDIS_LIB hiredis HINTS ${PROJECT_SOURCE_DIR}/lib/)
 
 #gate
 add_executable (gate main.cc dep/ae/ae.cc  ${SRC_LIST})
 target_link_libraries (gate ${HTTP_PARSER_LIB})
 target_link_libraries (gate ${JSONCPP_LIB})
+target_link_libraries (gate ${HIREDIS_LIB})
 target_link_libraries (gate ssl)
 target_link_libraries (gate crypto)
 target_link_libraries (gate dl)

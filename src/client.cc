@@ -82,12 +82,12 @@ struct packet_header {
     uint8_t reserve;
 };
 
-static void on_read(struct aeEventLoop *eventLoop, int sockfd, void *args, int event) {
+static void ev_read(struct aeEventLoop *eventLoop, int sockfd, void *args, int event) {
     Client* client = (Client*)args;
     client->evRead();
 }
 
-static void on_write(struct aeEventLoop *eventLoop, int sockfd, void *args, int event) {
+static void ev_write(struct aeEventLoop *eventLoop, int sockfd, void *args, int event) {
     Client* client = (Client*)args;
     client->evWrite();
 }
@@ -137,10 +137,10 @@ void Client::onServerShutdown() {
     Json::Value response;
     response["code"] = 0;
     this->replyJson(packet_type_down, response);
-    this->DelayClose();
+    this->delayClose();
 }
 
-void Client::DelayClose() {
+void Client::delayClose() {
     if (this->status == client_status_delayclose || this->status == client_status_closing || this->status == client_status_closed) {
         return;
     }
@@ -199,7 +199,7 @@ void Client::evWrite() {
             aeDeleteFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE);
             break;
         }
-        int ir = send(this->sockfd, b->front(), b->length(), 0);
+        int ir = ::send(this->sockfd, b->front(), b->length(), 0);
         this->logDebug("[client] evWrite,len:%ld, result= %d", b->length(), ir);
         if (ir > 0) {
             b->read(ir);
@@ -219,7 +219,7 @@ void Client::evWrite() {
 // |buffer  begin  end capacity |
 void Client::evRead() {
     for(;;) {
-        int ir = recv(this->sockfd, (void*)this->recvBuffer->back(), this->recvBuffer->capacity(), 0); 
+        int ir = ::recv(this->sockfd, (void*)this->recvBuffer->back(), this->recvBuffer->capacity(), 0); 
         int last_errno = errno;
         this->logDebug("[client] evRead, recv=%d, error=%d %s", ir, errno, strerror(errno));
         if (ir == 0 || (ir == -1 && last_errno != EAGAIN)) {
@@ -294,13 +294,13 @@ int Client::start() {
         return e_unknown_client;
     }
     this->handler = handler;
-    aeCreateFileEvent(this->gate->loop, this->sockfd, AE_READABLE, on_read, this);
-    aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, on_write, this);
+    aeCreateFileEvent(this->gate->loop, this->sockfd, AE_READABLE, ev_read, this);
+    aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, ev_write, this);
     return 0;
 }
 
 
-int Client::Send(const char* data, size_t len) {
+int Client::sendRaw(const char* data, size_t len) {
     if (nullptr == this->handler) {
         return -1;
     }
@@ -319,10 +319,10 @@ byte_array* Client::WillSend(size_t len) {
         } 
         byte_array* b = this->server->AllocBuffer(this->server->config.sendBufferSize);
         this->sendDeque.push_front(b);
-        aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, on_write, this);
+        aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, ev_write, this);
         return b;
     } else {
-        aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, on_write, this);
+        aeCreateFileEvent(this->gate->loop, this->sockfd, AE_WRITABLE, ev_write, this);
         return this->sendDeque.front();
     }
 }
@@ -346,33 +346,30 @@ void Client::Recv(const char* data, size_t len) {
             this->logDebug("[client] recv a packet, type=%d", header->opcode);
         }break; 
     }
-    //this->Send("World", 5);
+    //this->sendRaw("World", 5);
 }
 
 void Client::replyJson(uint8_t opcode, Json::Value& payload) {
     static thread_local char buffer[1024];
-
     packet_header* header = (packet_header*)buffer;
     header->opcode = opcode;
     Json::FastWriter writer;
     std::string data = writer.write(payload);
     memcpy(buffer + sizeof(packet_header), data.c_str(), data.length());
-    this->Send(buffer, sizeof(packet_header) + data.length());
-
     switch(opcode) {
         case packet_type_handshake:{
-            this->logAccess("| %15s | %ld | %ld | C<=G | handshake | %s", 
+            this->logAccess("| %15s | %ld | %ld | G<=C | handshake | %s", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId, data.c_str());
         }break;
         case packet_type_down:{
-            this->logAccess("| %15s | %ld | %ld | C<=G | down | %s", 
+            this->logAccess("| %15s | %ld | %ld | G<=C | down | %s", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId, data.c_str());
         }break;
     }
+    this->sendRaw(buffer, sizeof(packet_header) + data.length());
 }
 
 void Client::recvPakcetHandshake(const char* data, size_t len) {
-
     this->logDebug("[client] recv a packet, type=handshake");
     if (this->status != client_status_start) {
         this->logError("[client] recvPakcetData failed, error='status error, not start'");
@@ -386,7 +383,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
         response["code"] = 503;
         response["msg"] = this->gate->config->maintain;
         this->replyJson(packet_type_handshake, response);
-        this->DelayClose();
+        this->delayClose();
         return;
     }
     if (this->server->config.maintain.length() > 0) {
@@ -394,7 +391,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
         response["code"] = 503;
         response["msg"] = this->server->config.maintain;
         this->replyJson(packet_type_handshake, response);
-        this->DelayClose();
+        this->delayClose();
         return;
     }
     const char* payload = (char*)data + sizeof(packet_header);
@@ -438,8 +435,8 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
     this->upstream = upstream;
     this->status = client_status_handshake;
 
-    this->logAccess("| %15s | %ld | %ld | C=>G | handshake |", 
-                this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
+    this->logAccess("| %15s | %ld | %ld | C=>G | handshake | %s", 
+                this->remoteAddr.c_str(), this->server->serverId, this->sessionId, payload);
     Json::Value response;
     response["code"] = 200;
     response["heartbeat"] = this->server->config.heartbeat;
@@ -501,7 +498,7 @@ void Client::recvUpstreamData(Upstream* upstream, const char* data, size_t len) 
     packet_header* header = (packet_header*)buffer;
     header->opcode = packet_type_data;
     memcpy(buffer + sizeof(packet_header), data, len);
-    this->Send(buffer, sizeof(packet_header) + len);
+    this->sendRaw(buffer, sizeof(packet_header) + len);
 
     this->logAccess("| %15s | %ld | %ld | %ld | G=>C | data |", 
                 this->remoteAddr.c_str(), this->server->serverId, len, this->sessionId);
@@ -512,8 +509,8 @@ void Client::recvUpstreamKick(Upstream* upstream, const char* data, size_t len) 
     packet_header* header = (packet_header*)buffer;
     header->opcode = packet_type_kick;
     memcpy(buffer + sizeof(packet_header), data, len);
-    this->Send(buffer, sizeof(packet_header) + len);
-    this->DelayClose();
+    this->sendRaw(buffer, sizeof(packet_header) + len);
+    this->delayClose();
 
     this->logAccess("| %15s | %ld | %ld | G=>C | kick |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
@@ -581,7 +578,7 @@ int Client::onLocationRemove(Location* location) {
     Json::Value response;
     response["code"] = 0;
     this->replyJson(packet_type_down, response);
-    this->DelayClose();
+    this->delayClose();
     this->location = nullptr;
     return 0;
 }
@@ -597,7 +594,7 @@ int Client::onUpstreamRemove(Upstream* upstream) {
     Json::Value response;
     response["code"] = 0;
     this->replyJson(packet_type_down, response);
-    this->DelayClose();
+    this->delayClose();
     return 0;
 }
 
