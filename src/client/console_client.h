@@ -12,6 +12,7 @@ public:
     virtual int Unpack(const char* buffer, size_t len);
     virtual int Pack(const char* data, size_t len);
     int handleAuth(int argc, char** argv);
+    int handleSelect(int argc, char** argv);
     int handleLogin(int argc, char** argv);
     int handleReload(int argc, char** argv);
     int handleShutdown(int argc, char** argv);

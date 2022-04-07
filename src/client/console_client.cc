@@ -15,6 +15,7 @@ typedef int (ConsoleClient::*HandleFunc)(int argc, char** argv);
 
 static std::map<std::string, HandleFunc> handleFuncDict {
     {"auth", &ConsoleClient::handleAuth},
+    {"select", &ConsoleClient::handleSelect},
     {"help", &ConsoleClient::handleHelp},
     {"login", &ConsoleClient::handleLogin},
     {"reload", &ConsoleClient::handleReload},
@@ -31,6 +32,7 @@ enum packet_type {
     packet_type_kick            = 5,
     packet_type_down            = 6,
     packet_type_maintain        = 7,
+    packet_type_select          = 8,
 };
 
 struct packet_header {
@@ -72,9 +74,9 @@ void ConsoleClient::recvPakcetHandshake(const char* data, size_t len) {
         std::string data = writer.write(payload);
         memcpy(buffer + sizeof(packet_header), data.c_str(), data.length());
         this->client->Recv(buffer, sizeof(packet_header) + data.length());
-        this->replyf("ok\r\n");
+        this->replyf("OK\r\n");
     } else {
-        this->replyf("error\r\n");
+        this->replyf("%s\r\n", root["msg"].asString().c_str());
     }
 }
 
@@ -164,6 +166,18 @@ void ConsoleClient::replyf(const char* fmt, ...) {
     this->reply(buffer, len + 1);
 }
 
+int ConsoleClient::handleSelect(int argc, char** argv) {
+    thread_local static char buffer[1024];
+    if (argc < 2) {
+        return e_invalid_args;
+    }
+    packet_header* header = (packet_header*)buffer;
+    header->opcode = packet_type_select;
+    memcpy(buffer + sizeof(packet_header), argv[1], strlen(argv[1]));
+    this->client->Recv(buffer, sizeof(packet_header) + strlen(argv[1]));
+    return 0;
+}
+
 int ConsoleClient::handleAuth(int argc, char** argv) {
     thread_local static char buffer[1024];
     if (argc < 2) {
@@ -172,7 +186,6 @@ int ConsoleClient::handleAuth(int argc, char** argv) {
     packet_header* header = (packet_header*)buffer;
     header->opcode = packet_type_handshake;
     Json::Value payload;
-    payload["path"] = "/s3";
     payload["password"] = argv[1];
     Json::FastWriter writer;
     std::string data = writer.write(payload);

@@ -49,6 +49,7 @@ private:
     void onClose();
     void recvPakcetHandshake(const char* data, size_t len);
     void recvPakcetHandshakeAck(const char* data, size_t len);
+    void recvPakcetSelect(const char* data, size_t len);
     void recvPakcetData(const char* data, size_t len);
     void recvPakcetHeartbeat(const char* data, size_t len);
     void replyJson(uint8_t opcode, Json::Value& payload);

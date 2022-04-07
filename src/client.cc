@@ -73,6 +73,7 @@ enum packet_type {
     packet_type_kick            = 5,
     packet_type_down            = 6,
     packet_type_maintain        = 7,
+    packet_type_select          = 8,
 };
 
 struct packet_header {
@@ -342,6 +343,9 @@ void Client::Recv(const char* data, size_t len) {
         case packet_type_heartbeat: {
             this->recvPakcetHeartbeat(data, len);
         }break;
+        case packet_type_select:{
+            this->recvPakcetSelect(data, len);
+        }break;
         default: {
             this->logDebug("[client] recv a packet, type=%d", header->opcode);
         }break; 
@@ -375,6 +379,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
         this->logError("[client] recvPakcetData failed, error='status error, not start'");
         Json::Value response;
         response["code"] = 400;
+        response["msg"] = "bad request";
         this->replyJson(packet_type_handshake, response);
         return;
     }
@@ -402,6 +407,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
         this->logError("[client] recvPakcetHandshake failed, error='json parse'");
         Json::Value response;
         response["code"] = 400;
+        response["msg"] = "bad request";
         this->replyJson(packet_type_handshake, response);
         return;
     }
@@ -412,39 +418,106 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
         this->logError("[client] recvPakcetHandshake failed, password=%s, error='password invalid'", password.c_str());
         Json::Value response;
         response["code"] = 401;
+        response["msg"] = "WRONGPASS invalid username-password pair or user is disabled.";
         this->replyJson(packet_type_handshake, response);
         return;
     }
-    Location* location = this->server->SelectLocation(path);
-    if (nullptr == location) {
-        this->logError("[client] recvPakcetHandshake failed, path=%s, error='location not found'", path.c_str());
-        Json::Value response;
-        response["code"] = 404;
-        this->replyJson(packet_type_handshake, response);
-        return;
+
+    if (path.length() > 0) {
+        Location* location = this->server->SelectLocation(path);
+        if (nullptr == location) {
+            this->logError("[client] recvPakcetHandshake failed, path=%s, error='location not found'", path.c_str());
+            Json::Value response;
+            response["code"] = 404;
+            response["msg"] = "location not found";
+            this->replyJson(packet_type_handshake, response);
+            return;
+        }
+        Upstream* upstream = location->SelectUpstream();
+        if (nullptr == upstream) {
+            this->logError("[client] recvPakcetHandshake failed, path=%s, error='upstream not found'", path.c_str());
+            Json::Value response;
+            response["code"] = 404;
+            response["msg"] = "upstream not found";
+            this->replyJson(packet_type_handshake, response);
+            return;
+        }
+        this->location = location;
+        this->upstream = upstream;
     }
-    Upstream* upstream = location->SelectUpstream();
-    if (nullptr == upstream) {
-        this->logError("[client] recvPakcetHandshake failed, path=%s, error='upstream not found'", path.c_str());
-        Json::Value response;
-        response["code"] = 404;
-        this->replyJson(packet_type_handshake, response);
-        return;
-    }
-    this->location = location;
-    this->upstream = upstream;
+
     this->status = client_status_handshake;
 
     this->logAccess("| %15s | %ld | %ld | C=>G | handshake | %s", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId, payload);
     Json::Value response;
     response["code"] = 200;
+    response["msg"] = "OK";
     response["heartbeat"] = this->server->config.heartbeat;
     this->replyJson(packet_type_handshake, response);
 }
 
-void Client::recvPakcetHandshakeAck(const char* data, size_t len) { 
+void Client::recvPakcetSelect(const char* data, size_t len) { 
+    const char* payload = (char*)data + sizeof(packet_header);
+    std::string path(payload, len - sizeof(packet_header));
+    this->logAccess("| %15s | %ld | %ld | C=>G | select | %s", 
+                this->remoteAddr.c_str(), this->server->serverId, this->sessionId, path.c_str());
 
+    this->logDebug("[client] recv a packet, type=select");
+    if (this->status != client_status_working) {
+        this->logError("[client] recvPakcetSelect failed, status=%d, error='status error, working expect'", this->status);
+        Json::Value response;
+        response["code"] = 404;
+        response["msg"] = "location not found";
+        this->replyJson(packet_type_select, response);
+        return;
+    }
+    if (path.length() <= 0) {
+        this->logError("[client] recvPakcetSelect failed, error='path invalid'");
+        Json::Value response;
+        response["code"] = 404;
+        response["msg"] = "location not found";
+        this->replyJson(packet_type_select, response);
+        return;
+    }
+    if (this->upstream != nullptr) {
+        this->logError("[client] recvPakcetSelect failed, error='upstream already select'");
+        Json::Value response;
+        response["code"] = 405;
+        response["msg"] = "upstream already select";
+        this->replyJson(packet_type_select, response);
+        return;
+    }
+    Location* location = this->server->SelectLocation(path);
+    if (nullptr == location) {
+        this->logError("[client] recvPakcetSelect failed, path=%s, error='location not found'", path.c_str());
+        Json::Value response;
+        response["code"] = 404;
+        response["msg"] = "location not found";
+        this->replyJson(packet_type_select, response);
+        return;
+    }
+    Upstream* upstream = location->SelectUpstream();
+    if (nullptr == upstream) {
+        this->logError("[client] recvPakcetSelect failed, path=%s, error='upstream not found'", path.c_str());
+        Json::Value response;
+        response["code"] = 404;
+        response["msg"] = "upstream not found";
+        this->replyJson(packet_type_select, response);
+        return;
+    }
+    this->location = location;
+    this->upstream = upstream;
+    this->logAccess("| %15s | %ld | %ld | G=>S | new |", 
+            this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
+    this->upstream->RecvClientNew(this->sessionId);
+    Json::Value response;
+    response["code"] = 200;
+    response["msg"] = "OK";
+    this->replyJson(packet_type_select, response);
+}
+
+void Client::recvPakcetHandshakeAck(const char* data, size_t len) { 
     this->logAccess("| %15s | %ld | %ld | C=>G | handshake ack |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
 
@@ -463,7 +536,6 @@ void Client::recvPakcetHandshakeAck(const char* data, size_t len) {
 }
 
 void Client::recvPakcetData(const char* data, size_t len) { 
-
     this->logAccess("| %15s | %ld | %ld | C=>G | data |", 
                 this->remoteAddr.c_str(), this->server->serverId, this->sessionId);
 

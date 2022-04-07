@@ -102,7 +102,7 @@ void RedisUpstream::evConnectError() {
 void RedisUpstream::evConnectSucc() {
     Upstream* upstream = this->upstream;
     upstream->logDebug("[redis_upstream] evConnectSucc");
-    redisAsyncCommand(this->context, ev_command, this, "AUTH %s", upstream->group->config.password.c_str());
+    redisAsyncCommand(this->context, ev_command, this, "AUTH %s", upstream->config.password.c_str());
     upstream->status = upstream_status_connect;
 }
 
