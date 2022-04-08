@@ -283,6 +283,9 @@ int Config::upstreamBegin(UpstreamGroupConfig& self, std::vector<std::string>& _
         if (u.field_set & (1 << UF_HOST)) {
             upstreamConf.host = std::string(_args[1].c_str() + u.field_data[UF_HOST].off, u.field_data[UF_HOST].len);
         }
+        if (u.field_set & (1 << UF_PATH)) {
+            upstreamConf.path = std::string(_args[1].c_str() + u.field_data[UF_PATH].off, u.field_data[UF_PATH].len);
+        }
         if (u.field_set & (1 << UF_QUERY)) {
             upstreamConf.query = std::string(_args[1].c_str() + u.field_data[UF_QUERY].off, u.field_data[UF_QUERY].len);
             int keyStart = 0;
@@ -319,12 +322,8 @@ int Config::upstreamBegin(UpstreamGroupConfig& self, std::vector<std::string>& _
             }
         }
         upstreamConf.port = u.port;
-        if(upstreamConf.port == 0) {
-            throw exception(this->curLine+" syntax error");
-            return e_config_syntax;
-        }
         upstreamConf.addr = upstreamConf.host + ":" + std::string(_args[1].c_str() + u.field_data[UF_PORT].off, u.field_data[UF_PORT].len);
-        upstreamConf.name = upstreamConf.type + "://" + upstreamConf.addr;
+        upstreamConf.name = _args[1];
         if (_args.size() > 2 && _args[2].find("weight=") == 0) {
             upstreamConf.weight = atoi(_args[2].substr(7).c_str());
         }
@@ -396,7 +395,20 @@ void UpstreamGroupConfig::DebugString(std::stringstream& buffer, int level) {
 }
 
 void UpstreamConfig::DebugString(std::stringstream& buffer, int level) {
-    buffer << std::setfill(' ') << std::setw(level*4) << " " << this->type << "://" << this->user << ":" << this->password << "@" << this->addr;
+    buffer << std::setfill(' ') << std::setw(level*4) << " " << this->type << "://";
+
+    if (this->user.length() > 0 || this->password.length() > 0) {
+        buffer << this->user << ":" << this->password << "@";
+    }
+    if (this->host.length() > 0) {
+        buffer << this->host;
+    }
+    if (this->port > 0) {
+        buffer << this->port;
+    }
+    if (this->path.length() > 0) {
+        buffer << this->path;
+    }
     if (this->args.size() > 0) {
         buffer << "?";
         for (auto it = this->args.begin(); it != this->args.end(); ++it) {

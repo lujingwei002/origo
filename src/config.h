@@ -36,6 +36,7 @@ public:
     std::string     password;
     std::string     query;
     std::string     channel;
+    std::string     path;
     uint16_t        port;
     int             weight;
     std::map<std::string, std::string> args;

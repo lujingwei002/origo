@@ -22,6 +22,8 @@ const int e_unknown_client  = 16;
 const int e_invalid_args    = 17;
 const int e_command_not_found = 18;
 const int e_gate_reload     = 19;
+const int e_upstream_invalid= 20;
+
 
 
 struct out_of_memory : std::exception {
