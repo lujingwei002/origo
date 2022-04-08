@@ -283,6 +283,33 @@ int Config::upstreamBegin(UpstreamGroupConfig& self, std::vector<std::string>& _
         if (u.field_set & (1 << UF_HOST)) {
             upstreamConf.host = std::string(_args[1].c_str() + u.field_data[UF_HOST].off, u.field_data[UF_HOST].len);
         }
+        if (u.field_set & (1 << UF_QUERY)) {
+            upstreamConf.query = std::string(_args[1].c_str() + u.field_data[UF_QUERY].off, u.field_data[UF_QUERY].len);
+            int keyStart = 0;
+            int keyEnd = 0;
+            int mode = 0;
+            for (size_t i = 0; i < upstreamConf.query.length(); i++) {
+                if (mode == 0) {
+                    if (upstreamConf.query.at(i) == '=') {
+                        keyEnd = i;
+                        mode = 1;
+                    }
+                } else {
+                    if (upstreamConf.query.at(i) == '&') {
+                        upstreamConf.args[upstreamConf.query.substr(keyStart, keyEnd - keyStart)] = upstreamConf.query.substr(keyEnd + 1, i - keyEnd - 1);
+                        keyStart = i + 1;
+                        mode = 0;
+                    } else if (i == upstreamConf.query.length() - 1) {
+                        upstreamConf.args[upstreamConf.query.substr(keyStart, keyEnd - keyStart)] = upstreamConf.query.substr(keyEnd + 1, i - keyEnd);
+                        keyStart = i + 1;
+                        mode = 0;
+                    }
+                }
+            }
+            if(upstreamConf.args.find("channel") != upstreamConf.args.end()) {
+                upstreamConf.channel = upstreamConf.args["channel"];
+            }
+        }
         if (u.field_set & (1 << UF_USERINFO)) {
             std::string userinfo(_args[1].c_str() + u.field_data[UF_USERINFO].off, u.field_data[UF_USERINFO].len);
             size_t pos = userinfo.find(":");
@@ -369,5 +396,15 @@ void UpstreamGroupConfig::DebugString(std::stringstream& buffer, int level) {
 }
 
 void UpstreamConfig::DebugString(std::stringstream& buffer, int level) {
-    buffer << std::setfill(' ') << std::setw(level*4) << " " << this->type << "://" << this->user << ":" << this->password << "@" << this->addr << " " << "weight=" << this->weight << std::endl;
+    buffer << std::setfill(' ') << std::setw(level*4) << " " << this->type << "://" << this->user << ":" << this->password << "@" << this->addr;
+    if (this->args.size() > 0) {
+        buffer << "?";
+        for (auto it = this->args.begin(); it != this->args.end(); ++it) {
+            buffer << it->first << "=" << it->second;
+            if (std::next(it) != this->args.end()) {
+                buffer << "&";
+            }
+        }
+    }
+    buffer << " " << "weight=" << this->weight << std::endl;
 }

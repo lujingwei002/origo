@@ -14,6 +14,7 @@ public:
     int handleAuth(int argc, char** argv);
     int handleSelect(int argc, char** argv);
     int handleLogin(int argc, char** argv);
+    int handleData(int argc, char** argv);
     int handleReload(int argc, char** argv);
     int handleShutdown(int argc, char** argv);
     int handleHelp(int argc, char** argv);

@@ -27,7 +27,6 @@ public:
     Upstream*               upstream;
     byte_array*             recvBuffer;
     redisAsyncContext*      context;
-
 };
 
 RedisUpstream* NewRedisUpstream(Upstream* upstream);

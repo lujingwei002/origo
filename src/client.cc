@@ -374,7 +374,6 @@ void Client::replyJson(uint8_t opcode, Json::Value& payload) {
 }
 
 void Client::recvPakcetHandshake(const char* data, size_t len) {
-    this->logDebug("[client] recv a packet, type=handshake");
     if (this->status != client_status_start) {
         this->logError("[client] recvPakcetData failed, error='status error, not start'");
         Json::Value response;
@@ -400,6 +399,7 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
         return;
     }
     const char* payload = (char*)data + sizeof(packet_header);
+    size_t payloadLen = len - sizeof(packet_header);
     Json::Reader reader;
     Json::Value root;
     // reader将Json字符串解析到root，root将包含Json里所有子元素  
@@ -422,7 +422,6 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
         this->replyJson(packet_type_handshake, response);
         return;
     }
-
     if (path.length() > 0) {
         Location* location = this->server->SelectLocation(path);
         if (nullptr == location) {
@@ -445,11 +444,9 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
         this->location = location;
         this->upstream = upstream;
     }
-
     this->status = client_status_handshake;
-
-    this->logAccess("| %15s | %ld | %ld | C=>G | handshake | %s", 
-                this->remoteAddr.c_str(), this->server->serverId, this->sessionId, payload);
+    this->logAccess("| %15s | %ld | %ld | C=>G | handshake | %.*s", 
+                this->remoteAddr.c_str(), this->server->serverId, this->sessionId, payloadLen, payload);
     Json::Value response;
     response["code"] = 200;
     response["msg"] = "OK";
@@ -459,9 +456,11 @@ void Client::recvPakcetHandshake(const char* data, size_t len) {
 
 void Client::recvPakcetSelect(const char* data, size_t len) { 
     const char* payload = (char*)data + sizeof(packet_header);
-    std::string path(payload, len - sizeof(packet_header));
-    this->logAccess("| %15s | %ld | %ld | C=>G | select | %s", 
-                this->remoteAddr.c_str(), this->server->serverId, this->sessionId, path.c_str());
+    size_t payloadLen = len - sizeof(packet_header);
+    std::string path(payload, payloadLen);
+
+    this->logAccess("| %15s | %ld | %ld | C=>G | select | %.*s", 
+                this->remoteAddr.c_str(), this->server->serverId, this->sessionId, payloadLen, payload);
 
     this->logDebug("[client] recv a packet, type=select");
     if (this->status != client_status_working) {

@@ -17,8 +17,8 @@
 void ev_command(redisAsyncContext *c, void *r, void *privdata) {
     redisReply* reply = (redisReply*)r;
     if (reply == NULL) return;
-    RedisUpstream* upstream = (RedisUpstream*)c->data;
-    printf("argv[%s]: %s\n", (char*)privdata, reply->str);
+    //RedisUpstream* upstream = (RedisUpstream*)c->data;
+    //printf("argv[%s]: %s\n", (char*)privdata, reply->str);
 }
 
 void ev_connect_err(const redisAsyncContext *c, int status) {
@@ -172,8 +172,7 @@ void RedisUpstream::RecvClientData(const char* header, size_t headerLen, const c
         upstream->logError("[redis_upstream] RecvClientData failed, error='context not found'");
         return;
     }
-    printf("ggggggggggggg\n");
-    redisAsyncCommand(this->context, ev_command, this, "PUBLISH aaa %b%b", header, headerLen, payload, len);
+    redisAsyncCommand(this->context, ev_command, this, "PUBLISH %s %b%b", upstream->config.channel.c_str(), header, headerLen, payload, len);
     return;
 }
 

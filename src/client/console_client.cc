@@ -20,6 +20,7 @@ static std::map<std::string, HandleFunc> handleFuncDict {
     {"login", &ConsoleClient::handleLogin},
     {"reload", &ConsoleClient::handleReload},
     {"shutdown", &ConsoleClient::handleShutdown},
+    {"data", &ConsoleClient::handleData},
 };
 
 #define MAX_ARG_COUNT 10
@@ -221,10 +222,20 @@ int ConsoleClient::handleLogin(int argc, char** argv) {
     return 0;
 }
 
-int ConsoleClient::handleCommand(int argc, char** argv) {
-    for (int i = 0; i < argc; i++) {
-        printf("aa %s\n", argv[i]);
+int ConsoleClient::handleData(int argc, char** argv) {
+    thread_local static char buffer[1024];
+    if (argc < 2) {
+        return e_invalid_args;
     }
+    packet_header* header = (packet_header*)buffer;
+    header->opcode = packet_type_data;
+    size_t payloadLen = strlen(argv[1]);
+    memcpy(buffer + sizeof(packet_header), argv[1], payloadLen);
+    this->client->Recv(buffer, sizeof(packet_header) + payloadLen);
+    return 0;
+}
+
+int ConsoleClient::handleCommand(int argc, char** argv) {
     auto it = handleFuncDict.find(argv[0]);
     if (it == handleFuncDict.end()) {
         return e_command_not_found;

@@ -34,8 +34,11 @@ public:
     std::string     host;
     std::string     user;
     std::string     password;
+    std::string     query;
+    std::string     channel;
     uint16_t        port;
     int             weight;
+    std::map<std::string, std::string> args;
 };
 
 class UpstreamGroupConfig {
