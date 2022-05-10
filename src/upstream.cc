@@ -112,11 +112,11 @@ int Upstream::Unpack(const char* data, size_t len) {
     switch(header.opcode) {
         case packet_type_kick:
             {
-                this->gate->recvUpstreamKick(this, sessionId, data + sizeof(packet_header), len - sizeof(packet_header));
+                this->gate->recvUpstreamKick(this, sessionId, data + sizeof(packet_header), length - sizeof(packet_header) + sizeof(uint16_t));
             }break;
         case packet_type_data:
             {
-                this->gate->recvUpstreamData(this, sessionId, data + sizeof(packet_header), len - sizeof(packet_header));
+                this->gate->recvUpstreamData(this, sessionId, data + sizeof(packet_header), length - sizeof(packet_header) + sizeof(uint16_t));
             }break;
         default: {
             this->logError("[upstream] Unpack fail, opcode=%d, error='opcode error'", header.opcode);
