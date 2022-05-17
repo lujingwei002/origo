@@ -12,7 +12,7 @@ $(JSONCPP_DIR):
 	curl "https://codeload.github.com/open-source-parsers/jsoncpp/tar.gz/refs/tags/${JSONCPP_VERSION}" | tar xz
 
 $(JSONCPP_LIB): 
-	mkdir $(JSONCPP_DIR)/build
+	@mkdir -p $(JSONCPP_DIR)/build
 	cd $(JSONCPP_DIR)/build; cmake ..
 	$(MAKE) -C $(JSONCPP_DIR)/build 
 
@@ -63,13 +63,10 @@ $(HIREDIS_DIR):
 	curl "https://codeload.github.com/redis/hiredis/tar.gz/refs/tags/v$(HIREDIS_VERSION)" | tar xz
 
 $(HIREDIS_LIB): 
-	mkdir $(HIREDIS_DIR)/build
-	cd $(HIREDIS_DIR)/build; cmake ..
-	$(MAKE) -C $(HIREDIS_DIR)/build 
+	$(MAKE) -C $(HIREDIS_DIR)
 
 $(HIREDIS_DIR)/clean:
-	$(MAKE) -C $(HIREDIS_DIR)/build clean
-	rm -rf $(HIREDIS_DIR)/build
+	$(MAKE) -C $(HIREDIS_DIR) clean
 
 $(HIREDIS_DIR)/install:
 	@echo '=== install hiredis ==='
@@ -77,7 +74,7 @@ $(HIREDIS_DIR)/install:
 	@mkdir -p ../include
 	cp $(HIREDIS_LIB) ../lib
 	rm -rf ../include/hiredis
-	mkdir ../include/hiredis
+	@mkdir ../include/hiredis
 	cp -rf $(HIREDIS_DIR)/*.h ../include/hiredis
 	cp -rf $(HIREDIS_DIR)/adapters ../include/hiredis/adapters
 
