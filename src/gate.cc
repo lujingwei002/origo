@@ -372,6 +372,10 @@ int Gate::main() {
     if (err) {
         return err;
     }
+    err = chdir(this->config->workDir.c_str());
+    if (err) {
+        return err;
+    }
     err = this->tryLockPid();
     if (err) {
         return err;

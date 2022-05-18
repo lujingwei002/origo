@@ -23,6 +23,7 @@ const int e_invalid_args    = 17;
 const int e_command_not_found = 18;
 const int e_gate_reload     = 19;
 const int e_upstream_invalid= 20;
+const int e_system_call     = 21;
 
 
 

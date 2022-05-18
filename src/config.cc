@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include <sstream>
 #include <iomanip>
+#include <limits.h> //PATH_MAX
+#include <unistd.h> //readlink
 
 Arguments arguments;
 
@@ -176,6 +178,7 @@ int Config::selfBegin(Config& self) {
     READ_INT("worker", worker)
     READ_STRING("maintain", maintain)
     READ_STRING("pid", pid)
+    READ_STRING("workdir", workDir)
     READ_STRING("access_log", accessLog)
     READ_STRING("error_log", errorLog)
     READ_STRING("debug_log", debugLog)

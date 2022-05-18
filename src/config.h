@@ -117,6 +117,7 @@ public:
     std::string                                     errorLog;
     std::string                                     debugLog;
     std::string                                     pid;
+    std::string                                     workDir;
     std::map<std::string, ServerConfig>             serverDict;
     std::map<std::string, UpstreamGroupConfig>      upstreamGroupDict;
     std::string                                     maintain;
