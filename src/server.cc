@@ -67,6 +67,7 @@ Server::Server(Gate* gate, uint64_t serverId, ServerConfig& config) {
     this->status = server_status_none;
     this->timeoutTimerId = -1;
     this->heartbeatTimerId = -1;
+    this->sslCtx = nullptr;
 }
 
 Server::~Server() {
@@ -101,6 +102,10 @@ Server::~Server() {
     if (this->timeoutTimerId >= 0) {
         aeDeleteTimeEvent(this->gate->loop, this->timeoutTimerId);
         this->timeoutTimerId = -1;
+    }
+    if (nullptr != this->sslCtx) {
+        SSL_CTX_free(this->sslCtx);
+        this->sslCtx = nullptr;
     }
 }
 
@@ -194,9 +199,34 @@ int Server::initTimer() {
     return 0;
 }
 
+int Server::initSSL() {
+    if (this->config.net != "wss") {
+        return 0;
+    }
+    SSL_CTX* sslCtx = SSL_CTX_new(SSLv23_server_method());
+    if (!SSL_CTX_use_certificate_file(sslCtx, this->config.sslPem.c_str(), SSL_FILETYPE_PEM)) {
+        ERR_print_errors_fp(stderr);
+        return -1;
+    }
+    if (!SSL_CTX_use_PrivateKey_file(sslCtx, this->config.sslKey.c_str(), SSL_FILETYPE_PEM)) {
+        ERR_print_errors_fp(stderr);
+        return -1;
+    }
+    if (!SSL_CTX_check_private_key(sslCtx)) {
+        ERR_print_errors_fp(stderr);
+        return -1;
+    }
+    this->sslCtx = sslCtx;
+    return 0;
+}
+
 int Server::start() {
     int16_t port = this->config.port;
-    int err = this->initLogger();
+    int err = this->initSSL();
+    if (err) {
+        return err;
+    }
+    err = this->initLogger();
     if (err) {
         return err;
     }
@@ -473,6 +503,8 @@ void Server::onUpstreamRemove(Upstream* upstream) {
 
 IClientHandler* Server::newHandler(Client* client) {
     if (this->config.net == "ws") {
+        return NewWebsocketClient(this->gate, this, client);
+    } else if (this->config.net == "wss") {
         return NewWebsocketClient(this->gate, this, client);
     } else if (this->config.net == "telnet") {
         return NewTelnetClient(this->gate, this, client);

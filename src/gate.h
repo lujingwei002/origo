@@ -37,6 +37,7 @@ private:
     int initServer();
     int initUpstream();
     int initDaemon();
+    int initSSL();
     int tryLockPid();
     int run();
     int addServer(ServerConfig& config);

@@ -13,6 +13,8 @@
 #include <cstdarg>
 #include <fcntl.h> // open
 #include<sys/file.h> // flock
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 Gate* gate = nullptr;
 
@@ -363,6 +365,15 @@ int Gate::run() {
     return 0;
 }
 
+int Gate::initSSL() {
+    SSL_library_init();             /*  为SSL加载加密和哈希算法 */ 
+    SSL_load_error_strings();       /*  为了更友好的报错，加载错误码的描述字符串 */ 
+    ERR_load_BIO_strings();         /*  加载 BIO 抽象库的错误信息 */
+    OpenSSL_add_all_algorithms();   /*  加载所有 加密 和 散列 函数 */
+    return 0;
+}
+
+
 int Gate::main() {
     if (this->status != gate_status_none) {
         return e_gate_status;
@@ -385,6 +396,10 @@ int Gate::main() {
         return err;
     }
     err = this->initSignal();
+    if (err) {
+        return err;
+    }
+    err = this->initSSL();
     if (err) {
         return err;
     }

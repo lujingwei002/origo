@@ -198,16 +198,30 @@ WebsocketClient::WebsocketClient(Gate* gate, Server* server, Client* client) {
     this->setting.on_message_complete = on_message_complete;
     this->setting.on_chunk_header = on_chunk_header;
     this->setting.on_chunk_complete = on_chunk_complete;
+    if (server->config.net == "wss") {
+        this->ssl = SSL_new(this->server->sslCtx);
+        this->read_bio = BIO_new(BIO_s_mem());
+        this->write_bio = BIO_new(BIO_s_mem());
+        SSL_set_bio(this->ssl, this->read_bio, this->write_bio);
+        SSL_set_accept_state(this->ssl);
+    } else {
+        this->ssl = nullptr;
+        this->read_bio = nullptr;
+        this->write_bio = nullptr;
+    }
 }
 
 WebsocketClient::~WebsocketClient() {
-
+    if (nullptr != this->ssl) {
+        SSL_free(this->ssl);
+    }
 }
 
 void WebsocketClient::onMessageComplete() {
     static thread_local char secret[20];
     static thread_local char acceptKey[32]; // ceil(20/3)*4
     static thread_local char dateStr[128];
+    static thread_local char buffer[1024];
     if (!this->wantUpgrade) {
         this->client->Close();
         return;
@@ -232,7 +246,7 @@ void WebsocketClient::onMessageComplete() {
         this->client->Close();
         return;
     }
-    int r = snprintf(response->back(), response->capacity(), "HTTP/1.1 101 Switching Protocol\r\n\
+    int r = snprintf(buffer, sizeof(buffer), "HTTP/1.1 101 Switching Protocol\r\n\
 Connection: Upgrade\r\n\
 Upgrade: WebSocket\r\n\
 Access-Control-Allow-Credentials: true\r\n\
@@ -244,8 +258,8 @@ Date:%s\r\n\r\n", acceptKey, dateStr);
         this->client->Close();
         return;
     }
-    response->write(r);
     this->isUpgrade = true;
+    this->sendResponse(buffer, r);
 }
 
 void WebsocketClient::onHeaderValue(std::string& field, std::string& value) {
@@ -260,6 +274,71 @@ void WebsocketClient::onHeaderValue(std::string& field, std::string& value) {
 }
 
 int WebsocketClient::Unpack(const char* data, size_t len) {
+    if (nullptr != this->ssl) {
+        return this->recvEncryptData(data, len);
+    } else {
+        return this->recvData(data, len);
+    }
+}
+
+int WebsocketClient::recvEncryptData(const char* data, size_t len) {
+    //printf("recvEncryptData %ld\n", len);
+    BIO_write(this->read_bio, data, len);
+    if (!SSL_is_init_finished(this->ssl)) {
+        int ret = SSL_accept(this->ssl);
+        if (ret != 1) {
+            int err = SSL_get_error(this->ssl, ret);
+            if (err == SSL_ERROR_WANT_READ) {
+            } else if(err == SSL_ERROR_WANT_WRITE) {
+            }
+        } else {
+            this->readDecryptData();
+        }
+        this->writeBioToSocket();
+    } else {
+        this->readDecryptData();
+    }
+    return len;
+}
+
+void WebsocketClient::readDecryptData() {
+    static thread_local char data[10240];
+    for(;;) {
+        int byteRead = SSL_read(this->ssl, data, sizeof(data));
+        //printf("readDecryptData %d\n", byteRead);
+        if (byteRead < 0) {
+            int err = SSL_get_error(this->ssl, byteRead);
+            if (err == SSL_ERROR_WANT_READ) {
+            } else if(err == SSL_ERROR_WANT_WRITE) {
+                this->writeBioToSocket();
+            }
+            break;
+        } else if(byteRead == 0) {
+            break;
+        } else {
+            this->recvData(data, byteRead);
+            break;
+        }
+    }
+}
+
+int WebsocketClient::writeBioToSocket() {
+    static thread_local char data[10240];
+    for(;;) {
+        int byteRead = BIO_read(this->write_bio, data, sizeof(data));
+        //printf("writeBioToSocket %d/%d\n", byteRead, sizeof(data));
+        if (byteRead <= 0) {
+            break;
+        }
+        int err = this->send(data, byteRead);
+        if (err) {
+            return err;
+        }
+    }
+    return 0;
+}
+
+int WebsocketClient::recvData(const char* data, size_t len) {
     if (!this->isUpgrade) {
         this->client->logDebug("[websocket] recv http request\n%s", data);
         const char* header = strstr(data, "\r\n\r\n");
@@ -357,20 +436,61 @@ void WebsocketClient::recvPingFrame() {
     this->client->logDebug("[websocket] recvPingFrame");
 }
 
-int WebsocketClient::Pack(const char* data, size_t len) {
-    byte_array* frame = this->client->WillSend(websocket_frame_header_max_size + len);
-    if (nullptr == frame) {
+int WebsocketClient::send(const char* data, size_t len) {
+    //printf("send %ld\n", len);
+    byte_array* buffer = this->client->WillSend(len);
+    if (nullptr == buffer) {
         return -1;
     }
-    int frameLen = frame_pack(frame->back(), websocket_frame_type_binary, data, len);
-    if (frameLen <= 0) {
-        return -1;
-    }
-    this->client->logDebug("[websocket] pack, len:%d", frameLen);
-    frame->write(frameLen);
+    memcpy(buffer->back(), data, len);
+    buffer->write(len);
     return 0;
 }
 
+int WebsocketClient::sendResponse(const char* data, size_t len) {
+    //printf("sendResponse %ld\n", len);
+    if (nullptr != this->ssl) {
+        int byteWrite = SSL_write(this->ssl, data, len);
+        return this->writeBioToSocket();
+    } else {
+        byte_array* response = this->client->WillSend(len);
+        if (nullptr == response) {
+            return -1;
+        }
+        memcpy(response->back(), data, len);
+        response->write(len);
+        return 0;
+    }
+}
 
+int WebsocketClient::Pack(const char* data, size_t len) {
+    if (len >= 0xffff) {
+        gate->logError("pack frame too large");
+        return -1;
+    }
+    if (nullptr != this->ssl) {
+        static thread_local char buffer[0xffff];
+        int frameLen = frame_pack(buffer, websocket_frame_type_binary, data, len);
+        if (frameLen <= 0) {
+            return -1;
+        }
+        this->client->logDebug("[websocket] pack, len:%d", frameLen);
+        int byteWrite = SSL_write(this->ssl, buffer, frameLen);
+        return this->writeBioToSocket();
+    } else {
+        //printf("sendFrame %ld\n", len);
+        byte_array* frame = this->client->WillSend(websocket_frame_header_max_size + len);
+        if (nullptr == frame) {
+            return -1;
+        }
+        int frameLen = frame_pack(frame->back(), websocket_frame_type_binary, data, len);
+        if (frameLen <= 0) {
+            return -1;
+        }
+        this->client->logDebug("[websocket] pack, len:%d", frameLen);
+        frame->write(frameLen);
+        return 0;
+    }
+}
 
 

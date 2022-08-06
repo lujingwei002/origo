@@ -22,7 +22,7 @@ int TcpClient::Unpack(const char* buffer, size_t len) {
         return 0;
     }
     uint16_t* lengths = (uint16_t*)buffer;
-    uint16_t payload_len = lengths[0] << 8 || lengths[1];
+    uint16_t payload_len = (lengths[0] << 8) | lengths[1];
     if (len < sizeof(uint16_t) + payload_len) {
         return 0;
     }

@@ -7,6 +7,9 @@
 #include <vector>
 #include <map>
 #include <cstdint>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
 
 class ServerConfig;
 class Location;
@@ -48,6 +51,7 @@ private:
     void onClose();
     int initLogger();
     int initTimer();
+    int initSSL();
     int removeLocation(Location* location);
 public:
     int                                 sockfd;
@@ -64,6 +68,7 @@ public:
     int                                 status;
     long long                           heartbeatTimerId;
     long long                           timeoutTimerId;
+    SSL_CTX*                            sslCtx;
 };
 
 Server* NewServer(Gate* gate, uint64_t serverId, ServerConfig& config);

@@ -213,6 +213,8 @@ int Config::serverBegin(ServerConfig& self, std::vector<std::string>& _args) {
     READ_STRING("requirepass", requirepass)
     READ_STRING("access_log", accessLog)
     READ_STRING("error_log", errorLog)
+    READ_STRING("ssl_pem", sslPem)
+    READ_STRING("ssl_key", sslKey)
     READ_INT("heartbeat", heartbeat)
     READ_INT("max_conn_per_sec", maxConnPerSec)
     READ_INT("send_buffer_size", sendBufferSize)
@@ -361,6 +363,8 @@ void ServerConfig::DebugString(std::stringstream& buffer, int level) {
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "name:" << this->name << std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "listen:" << this->listen << std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "net:" << this->net << std::endl;
+    buffer << std::setfill(' ') << std::setw(level*4) << " " << "ssl_pem:" << this->sslPem<< std::endl;
+    buffer << std::setfill(' ') << std::setw(level*4) << " " << "ssl_key:" << this->sslKey<< std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "maintain:" << this->maintain << std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "port:" << this->port << std::endl;
     buffer << std::setfill(' ') << std::setw(level*4) << " " << "max_conn_per_sec:" << this->maxConnPerSec << std::endl;

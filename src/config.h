@@ -79,6 +79,8 @@ public:
     std::string                             requirepass;
     std::string                             listen;
     std::string                             net;
+    std::string                             sslPem;
+    std::string                             sslKey;
     int16_t                                 port;
     std::string                             tslCertificate;
     int16_t                                 heartbeat;
