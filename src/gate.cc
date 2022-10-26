@@ -385,6 +385,7 @@ int Gate::main() {
     }
     err = chdir(this->config->workDir.c_str());
     if (err) {
+        fprintf(stderr, "work dir %s not exist\n", this->config->workDir.c_str());
         return err;
     }
     err = this->tryLockPid();

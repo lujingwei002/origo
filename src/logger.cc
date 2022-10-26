@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <ctime>
 
 std::map<std::string, Logger*> loggerDict;
 

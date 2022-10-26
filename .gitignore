@@ -37,3 +37,5 @@ build
 dep/http-parser*
 dep/jsoncpp*
 lib
+log
+include/hiredis
